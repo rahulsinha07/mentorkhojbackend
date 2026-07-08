@@ -114,10 +114,12 @@ class MentorDashboardController extends Controller
             'images.*' => 'image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'remove_images' => 'nullable|array',
             'social_links' => 'nullable|array',
-            'social_links.facebook' => 'nullable|url|max:500',
             'social_links.instagram' => 'nullable|url|max:500',
+            'social_links.facebook' => 'nullable|url|max:500',
             'social_links.linkedin' => 'nullable|url|max:500',
             'social_links.youtube' => 'nullable|url|max:500',
+            'social_links.whatsapp' => 'nullable|url|max:500',
+            'social_links.linktree' => 'nullable|url|max:500',
             'social_links.website' => 'nullable|url|max:500',
         ]);
 

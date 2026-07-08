@@ -63,7 +63,7 @@ class MentorLogic
     /** @return array<string, string> */
     public static function normalizeSocialLinks(?array $links): array
     {
-        $allowed = ['facebook', 'instagram', 'linkedin', 'youtube', 'website'];
+        $allowed = ['instagram', 'facebook', 'linkedin', 'youtube', 'whatsapp', 'linktree', 'website'];
         $out = [];
         foreach ($allowed as $key) {
             $url = trim((string) ($links[$key] ?? ''));
