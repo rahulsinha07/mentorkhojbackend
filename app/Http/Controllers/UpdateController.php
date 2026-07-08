@@ -483,6 +483,18 @@ class UpdateController extends Controller
             ]),
         ]);
 
+        DB::table('business_settings')->updateOrInsert(['key' => 'whatsapp_otp_verification'], [
+            'value' => json_encode([
+                'status' => 0,
+                'provider' => 'meta',
+                'phone_number_id' => '',
+                'access_token' => '',
+                'template_name' => 'mentorkhoj_otp',
+                'template_language' => 'en',
+                'include_copy_code_button' => 1,
+            ]),
+        ]);
+
         return redirect('/admin/auth/login');
     }
 

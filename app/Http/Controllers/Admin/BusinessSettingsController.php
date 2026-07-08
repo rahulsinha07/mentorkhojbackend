@@ -1973,4 +1973,34 @@ class BusinessSettingsController extends Controller
         Toastr::success(translate('updated_successfully'));
         return back();
     }
+
+    /**
+     * @return Application|Factory|View
+     */
+    public function whatsappOTPVerification(): Factory|View|Application
+    {
+        return view('admin-views.business-settings.whatsapp-otp-verification');
+    }
+
+    /**
+     * @param Request $request
+     * @return RedirectResponse
+     */
+    public function whatsappOTPVerificationUpdate(Request $request): RedirectResponse
+    {
+        DB::table('business_settings')->updateOrInsert(['key' => 'whatsapp_otp_verification'], [
+            'value' => json_encode([
+                'status' => $request->has('status') ? 1 : 0,
+                'provider' => $request['provider'] ?? 'meta',
+                'phone_number_id' => $request['phone_number_id'] ?? '',
+                'access_token' => $request['access_token'] ?? '',
+                'template_name' => $request['template_name'] ?? 'mentorkhoj_otp',
+                'template_language' => $request['template_language'] ?? 'en',
+                'include_copy_code_button' => $request->has('include_copy_code_button') ? 1 : 0,
+            ]),
+        ]);
+
+        Toastr::success(translate('updated_successfully'));
+        return back();
+    }
 }

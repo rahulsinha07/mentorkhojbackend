@@ -69,6 +69,7 @@
                         </th>
                         <th class="table-column-pl-0">{{translate('customer name')}}</th>
                         <th>{{translate('contact info')}}</th>
+                        <th class="text-center">{{translate('role')}}</th>
                         <th class="text-center">{{translate('Total Orders')}}</th>
                         <th class="text-center">{{translate('Total Order Amount')}}</th>
                         <th class="text-center">{{translate('status')}}</th>
@@ -100,6 +101,13 @@
                                 <div>
                                     <a href="Tel:{{$customer['phone']}}">{{$customer['phone']}}</a>
                                 </div>
+                            </td>
+                            <td class="text-center">
+                                @if($customer->mentorProfile)
+                                    <span class="badge badge-soft-primary py-2 px-3 font-medium">{{translate('Mentor')}}</span>
+                                @else
+                                    <span class="badge badge-soft-secondary py-2 px-3 font-medium">{{translate('Mentee')}}</span>
+                                @endif
                             </td>
                             <td>
                                 <div class="text-center">

@@ -25,6 +25,7 @@ use App\Http\Controllers\Admin\EmployeeController;
 use App\Http\Controllers\Admin\LanguageController;
 use App\Http\Controllers\Admin\LocationSettingsController;
 use App\Http\Controllers\Admin\LoyaltyPointController;
+use App\Http\Controllers\Admin\MentorController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\OfferController;
 use App\Http\Controllers\Admin\OrderController;
@@ -190,6 +191,13 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('feature/{id}/{is_featured}', [ProductController::class, 'feature'])->name('feature');
         });
 
+        Route::group(['prefix' => 'mentor', 'as' => 'mentor.','middleware'=>['module:product_management']], function () {
+            Route::get('list', [MentorController::class, 'list'])->name('list');
+            Route::get('status/{id}/{status}', [MentorController::class, 'status'])->name('status');
+            Route::get('publish/{id}/{is_published}', [MentorController::class, 'publish'])->name('publish');
+            Route::delete('delete/{id}', [MentorController::class, 'delete'])->name('delete');
+        });
+
         Route::group(['prefix' => 'orders', 'as' => 'orders.','middleware'=>['module:order_management']], function () {
             Route::get('list/{status}', [OrderController::class, 'list'])->name('list');
             Route::get('details/{id}', [OrderController::class, 'details'])->name('details');
@@ -350,6 +358,8 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
                     Route::post('update-chat', [BusinessSettingsController::class, 'updateChat'])->name('update-chat');
                     Route::get('firebase-otp-verification', [BusinessSettingsController::class, 'firebaseOTPVerification'])->name('firebase-otp-verification');
                     Route::post('firebase-otp-verification-update', [BusinessSettingsController::class, 'firebaseOTPVerificationUpdate'])->name('firebase-otp-verification-update');
+                    Route::get('whatsapp-otp-verification', [BusinessSettingsController::class, 'whatsappOTPVerification'])->name('whatsapp-otp-verification');
+                    Route::post('whatsapp-otp-verification-update', [BusinessSettingsController::class, 'whatsappOTPVerificationUpdate'])->name('whatsapp-otp-verification-update');
 
                     Route::group(['prefix' => 'offline-payment', 'as' => 'offline-payment.'], function(){
                         Route::get('list', [OfflinePaymentMethodController::class, 'list'])->name('list');

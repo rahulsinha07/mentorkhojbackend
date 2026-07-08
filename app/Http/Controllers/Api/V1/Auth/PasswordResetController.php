@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\CentralLogics\Helpers;
-use App\CentralLogics\SMS_module;
+use App\CentralLogics\OtpDelivery;
+use App\CentralLogics\WhatsAppOtpModule;
 use App\Http\Controllers\Controller;
 use App\User;
 use Illuminate\Http\JsonResponse;
@@ -13,7 +14,6 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Carbon;
 use Carbon\CarbonInterval;
-use Modules\Gateways\Traits\SmsGateway;
 
 class PasswordResetController extends Controller
 {
@@ -39,6 +39,9 @@ class PasswordResetController extends Controller
             ->orWhere('phone', 'like', "%{$request['email_or_phone']}%")->first();
 
         $send_by_phone = Helpers::get_business_settings('phone_verification');
+        $whatsappOtpEnabled = WhatsAppOtpModule::isEnabled();
+        $phoneToSend = $customer->phone;
+        $isPhoneLookup = !filter_var($request['email_or_phone'], FILTER_VALIDATE_EMAIL);
 
         if (isset($customer)) {
 
@@ -71,14 +74,13 @@ class PasswordResetController extends Controller
             ]);
 
 
-            if ($send_by_phone) {
-                if(addon_published_status('Gateways')){
-                    $response = SmsGateway::send($request['phone'],$token);
-                }else{
-                    $response = SMS_module::send($request['phone'], $token);
-                }
+            if (($whatsappOtpEnabled && $phoneToSend && ($send_by_phone || $isPhoneLookup))
+                || ($send_by_phone && $phoneToSend)) {
+                $delivery = OtpDelivery::sendPhoneOtp($phoneToSend, $token);
+
                 return response()->json([
-                    'message' => $response
+                    'message' => $delivery['message'],
+                    'channel' => $delivery['channel'],
                 ], 200);
             }
 

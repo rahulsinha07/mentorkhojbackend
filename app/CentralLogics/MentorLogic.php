@@ -60,6 +60,20 @@ class MentorLogic
         return rtrim($site, '/') . '/mentor/' . $mentor->username;
     }
 
+    /** @return array<string, string> */
+    public static function normalizeSocialLinks(?array $links): array
+    {
+        $allowed = ['facebook', 'instagram', 'linkedin', 'youtube', 'website'];
+        $out = [];
+        foreach ($allowed as $key) {
+            $url = trim((string) ($links[$key] ?? ''));
+            if ($url !== '') {
+                $out[$key] = $url;
+            }
+        }
+        return $out;
+    }
+
     public static function platformFeePercent(): float
     {
         $setting = BusinessSetting::where('key', 'mentor_platform_fee_percent')->first();
@@ -86,6 +100,7 @@ class MentorLogic
             'is_published' => $mentor->is_published,
             'view_count' => $mentor->view_count,
             'profile_url' => self::profileUrl($mentor),
+            'social_links' => $mentor->social_links_array,
             'rating' => self::ratingSummary($mentor),
             'active_reviews' => self::reviewsPreview($mentor),
             'services' => $services->map(fn ($s) => self::formatService($s))->values()->all(),
@@ -152,6 +167,7 @@ class MentorLogic
             ['key' => 'services', 'label' => 'Add session offerings', 'done' => $mentor->enabledServices()->count() > 0],
             ['key' => 'payouts', 'label' => 'Set up payouts', 'done' => !empty($payout['account_number'] ?? $payout['upi_id'] ?? null)],
             ['key' => 'share', 'label' => 'Share your page', 'done' => $hasShare],
+            ['key' => 'social', 'label' => 'Add social media links', 'done' => count($mentor->social_links_array) > 0],
             ['key' => 'publish', 'label' => 'Publish page', 'done' => (bool) $mentor->is_published],
         ];
     }

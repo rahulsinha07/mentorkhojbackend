@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\CentralLogics\Helpers;
+use App\CentralLogics\OtpDelivery;
 use App\CentralLogics\SMS_module;
+use App\CentralLogics\WhatsAppOtpModule;
 use App\Http\Controllers\Controller;
 use App\Model\EmailVerifications;
 use App\Model\PhoneVerification;
@@ -71,7 +73,8 @@ class CustomerAuthController extends Controller
 
         $phoneVerification = Helpers::get_business_settings('phone_verification');
         $emailVerification = Helpers::get_business_settings('email_verification');
-        if ($phoneVerification && !$user->is_phone_verified) {
+        $whatsappOtpEnabled = WhatsAppOtpModule::isEnabled();
+        if (($phoneVerification || $whatsappOtpEnabled) && !$user->is_phone_verified) {
             return response()->json(['temporary_token' => $temporaryToken], 200);
         }
         if ($emailVerification && $user->email_verified_at == null) {
@@ -106,7 +109,7 @@ class CustomerAuthController extends Controller
             return response()->json(['errors' => Helpers::error_processor($validator)], 403);
         }
 
-        if (Helpers::get_business_settings('phone_verification')) {
+        if (Helpers::get_business_settings('phone_verification') || WhatsAppOtpModule::isEnabled()) {
 
             $otpIntervalTime = Helpers::get_business_settings('otp_resend_time') ?? 60;
             $otpVerificationData = DB::table('phone_verifications')->where('phone', $request['phone'])->first();
@@ -131,14 +134,11 @@ class CustomerAuthController extends Controller
                 'updated_at' => now(),
             ]);
 
-            if(addon_published_status('Gateways')){
-                $response = SmsGateway::send($request['phone'],$token);
-            }else{
-                $response = SMS_module::send($request['phone'], $token);
-            }
+            $delivery = OtpDelivery::sendPhoneOtp($request['phone'], $token);
 
             return response()->json([
-                'message' => $response,
+                'message' => $delivery['message'],
+                'channel' => $delivery['channel'],
                 'token' => 'active'
             ], 200);
         } else {
@@ -669,26 +669,22 @@ class CustomerAuthController extends Controller
             $user = $this->user->where('email', $request['email'])->first();
 
             if (!isset($user)) {
-                $name = explode(' ', $data['name']);
-                if (count($name) > 1) {
-                    $fast_name = implode(" ", array_slice($name, 0, -1));
-                    $last_name = end($name);
-                } else {
-                    $fast_name = implode(" ", $name);
-                    $last_name = '';
-                }
+                [$fast_name, $last_name] = $this->resolveSocialProfileNames($data);
 
                 $user = $this->user;
                 $user->f_name = $fast_name;
                 $user->l_name = $last_name;
                 $user->email = $data['email'];
                 $user->phone = null;
-                $user->image = 'def.png';
+                $user->image = $this->resolveSocialProfileImage($data);
                 $user->password = bcrypt($request->ip());
                 $user->is_block = 0;
                 $user->login_medium = $request['medium'];
                 $user->referral_code = Helpers::generate_referer_code();
+                $user->email_verified_at = now();
                 $user->save();
+            } else {
+                $this->syncSocialProfile($user, $data, $request['medium']);
             }
 
             $token = $user->createToken('AuthToken')->accessToken;
@@ -757,5 +753,143 @@ class CustomerAuthController extends Controller
 
         $tempToken = Str::random(120);
         return response()->json(['errors' => null, 'temp_token' => $tempToken], 200);
+    }
+
+    /**
+     * Passwordless login: send OTP to phone (WhatsApp or SMS).
+     */
+    public function sendLoginOtp(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'phone' => 'required|min:11|max:14',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => Helpers::error_processor($validator)], 403);
+        }
+
+        $user = $this->user->where('phone', $request['phone'])->first();
+        if (!$user) {
+            return response()->json(['errors' => [
+                ['code' => 'not-found', 'message' => 'Customer not found!'],
+            ]], 404);
+        }
+
+        if ($user->is_block) {
+            return response()->json(['errors' => [
+                ['code' => 'block', 'message' => translate('your_account_is_blocked')],
+            ]], 403);
+        }
+
+        $otpIntervalTime = Helpers::get_business_settings('otp_resend_time') ?? 60;
+        $otpVerificationData = DB::table('phone_verifications')->where('phone', $request['phone'])->first();
+
+        if (isset($otpVerificationData) && Carbon::parse($otpVerificationData->created_at)->DiffInSeconds() < $otpIntervalTime) {
+            $time = $otpIntervalTime - Carbon::parse($otpVerificationData->created_at)->DiffInSeconds();
+            return response()->json(['errors' => [[
+                'code' => 'otp',
+                'message' => translate('please_try_again_after_') . $time . ' ' . translate('seconds'),
+            ]]], 403);
+        }
+
+        $token = (env('APP_MODE') == 'live') ? rand(100000, 999999) : 123456;
+
+        DB::table('phone_verifications')->updateOrInsert(['phone' => $request['phone']], [
+            'phone' => $request['phone'],
+            'token' => $token,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $delivery = OtpDelivery::sendPhoneOtp($request['phone'], $token);
+
+        return response()->json([
+            'message' => $delivery['message'],
+            'channel' => $delivery['channel'],
+        ], 200);
+    }
+
+    /**
+     * Passwordless login: verify OTP and return auth token.
+     */
+    public function verifyLoginOtp(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'phone' => 'required',
+            'token' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => Helpers::error_processor($validator)], 403);
+        }
+
+        return $this->verifyPhone($request);
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function resolveSocialProfileNames(array $data): array
+    {
+        $firstName = trim((string) ($data['given_name'] ?? ''));
+        $lastName = trim((string) ($data['family_name'] ?? ''));
+
+        if ($firstName === '' && !empty($data['name'])) {
+            $parts = preg_split('/\s+/', trim((string) $data['name']), 2);
+            $firstName = $parts[0] ?? '';
+            $lastName = $parts[1] ?? '';
+        }
+
+        if ($firstName === '' && !empty($data['email'])) {
+            $firstName = implode('@', explode('@', (string) $data['email'], -1));
+        }
+
+        return [$firstName, $lastName];
+    }
+
+    private function resolveSocialProfileImage(array $data): string
+    {
+        $pictureUrl = $data['picture'] ?? null;
+        if (!$pictureUrl) {
+            return 'def.png';
+        }
+
+        try {
+            $imageName = Helpers::upload('profile/', 'png', $pictureUrl);
+            return $imageName ?: 'def.png';
+        } catch (\Throwable $exception) {
+            return 'def.png';
+        }
+    }
+
+    private function syncSocialProfile(User $user, array $data, string $medium): void
+    {
+        [$firstName, $lastName] = $this->resolveSocialProfileNames($data);
+        $dirty = false;
+
+        if (!$user->f_name && $firstName !== '') {
+            $user->f_name = $firstName;
+            $dirty = true;
+        }
+        if (!$user->l_name && $lastName !== '') {
+            $user->l_name = $lastName;
+            $dirty = true;
+        }
+        if ((!$user->image || $user->image === 'def.png') && !empty($data['picture'])) {
+            $user->image = $this->resolveSocialProfileImage($data);
+            $dirty = true;
+        }
+        if (!$user->login_medium || $user->login_medium === 'general') {
+            $user->login_medium = $medium;
+            $dirty = true;
+        }
+        if (!$user->email_verified_at) {
+            $user->email_verified_at = now();
+            $dirty = true;
+        }
+
+        if ($dirty) {
+            $user->save();
+        }
     }
 }

@@ -33,6 +33,8 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
 
         Route::post('check-phone', [CustomerAuthController::class, 'checkPhone']);
         Route::post('verify-phone', [CustomerAuthController::class, 'verifyPhone']);
+        Route::post('send-login-otp', [CustomerAuthController::class, 'sendLoginOtp']);
+        Route::post('verify-login-otp', [CustomerAuthController::class, 'verifyLoginOtp']);
         Route::post('check-email', [CustomerAuthController::class, 'checkEmail']);
         Route::post('verify-email', [CustomerAuthController::class, 'verifyEmail']);
         Route::post('firebase-auth-verify', [CustomerAuthController::class, 'firebaseAuthVerify']);
@@ -49,6 +51,8 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
     Route::group(['prefix' => 'config'], function () {
         Route::get('/', [ConfigController::class, 'configuration']);
     });
+
+    Route::match(['get', 'post'], 'whatsapp/webhook', [\App\Http\Controllers\Api\V1\WhatsAppWebhookController::class, 'handle']);
 
     Route::group(['prefix' => 'products'], function () {
         Route::get('all', [ProductController::class, 'getAllProducts']);

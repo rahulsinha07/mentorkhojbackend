@@ -43,7 +43,7 @@ class CustomerController extends Controller
         if($request->has('search'))
         {
             $key = explode(' ', $request['search']);
-            $customers = $this->user->with(['orders'])->
+            $customers = $this->user->with(['orders','mentorProfile'])->
                     where(function ($q) use ($key) {
                         foreach ($key as $value) {
                             $q->orWhere('f_name', 'like', "%{$value}%")
@@ -54,7 +54,7 @@ class CustomerController extends Controller
             });
             $queryParam = ['search' => $request['search']];
         }else{
-            $customers = $this->user->with(['orders']);
+            $customers = $this->user->with(['orders','mentorProfile']);
         }
         $customers = $customers->latest()->paginate(Helpers::getPagination())->appends($queryParam);
 
@@ -218,7 +218,7 @@ class CustomerController extends Controller
         $queryParam = [];
         $search = $request['search'];
 
-        $customers = $this->user->when($request->has('search'), function ($query) use ($request) {
+        $customers = $this->user->with('mentorProfile')->when($request->has('search'), function ($query) use ($request) {
                 $key = explode(' ', $request['search']);
                 $query->where(function ($q) use ($key) {
                     foreach ($key as $value) {
@@ -239,6 +239,7 @@ class CustomerController extends Controller
                 'last_name' => $customer['l_name'],
                 'phone' => $customer['phone'],
                 'email' => $customer['email'],
+                'role' => $customer->mentorProfile ? 'Mentor' : 'Mentee',
             ];
         }
         return (new FastExcel($storage))->download('customers.xlsx');

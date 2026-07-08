@@ -48,4 +48,9 @@
             {{translate('Firebase OTP Verification')}}
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {{Request::is('admin/business-settings/web-app/third-party/whatsapp-otp-verification*')?'active':''}}" href="{{route('admin.business-settings.web-app.third-party.whatsapp-otp-verification')}}">
+            {{translate('WhatsApp OTP Verification')}}
+        </a>
+    </li>
 </ul>

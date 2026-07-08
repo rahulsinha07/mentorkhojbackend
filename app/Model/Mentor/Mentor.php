@@ -36,6 +36,7 @@ class Mentor extends Model
         'view_count',
         'share_caption',
         'share_short_url',
+        'social_links',
     ];
 
     public function user(): BelongsTo
@@ -96,6 +97,15 @@ class Mentor extends Model
         }
         $decoded = json_decode($this->category_ids, true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    public function getSocialLinksArrayAttribute(): array
+    {
+        if (empty($this->social_links)) {
+            return [];
+        }
+        $decoded = json_decode($this->social_links, true);
+        return is_array($decoded) ? array_filter($decoded) : [];
     }
 
     public function scopePublished($query)

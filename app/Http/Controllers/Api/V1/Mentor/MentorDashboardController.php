@@ -113,6 +113,12 @@ class MentorDashboardController extends Controller
             'images' => 'nullable|array',
             'images.*' => 'image|mimes:jpeg,png,jpg,gif,svg|max:2048',
             'remove_images' => 'nullable|array',
+            'social_links' => 'nullable|array',
+            'social_links.facebook' => 'nullable|url|max:500',
+            'social_links.instagram' => 'nullable|url|max:500',
+            'social_links.linkedin' => 'nullable|url|max:500',
+            'social_links.youtube' => 'nullable|url|max:500',
+            'social_links.website' => 'nullable|url|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -141,6 +147,11 @@ class MentorDashboardController extends Controller
         if (!empty($newFiles) || !empty($remove)) {
             $merged = MentorImageService::merge($existing, $remove, $newFiles);
             $mentor->images = json_encode($merged ?: ['default.png']);
+        }
+        if ($request->has('social_links')) {
+            $mentor->social_links = json_encode(
+                MentorLogic::normalizeSocialLinks($request->input('social_links', []))
+            );
         }
 
         $mentor->save();

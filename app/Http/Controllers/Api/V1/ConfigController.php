@@ -67,6 +67,8 @@ class ConfigController extends Controller
         );
 
         $firebaseOTPVerification = Helpers::get_business_settings('firebase_otp_verification');
+        $whatsappOtpVerification = Helpers::get_business_settings('whatsapp_otp_verification');
+        $whatsappOtpEnabled = is_array($whatsappOtpVerification) && (int) ($whatsappOtpVerification['status'] ?? 0) === 1;
         $emailVerification = (integer)Helpers::get_business_settings('email_verification') ?? 0;
         $phoneVerification = (integer)Helpers::get_business_settings('phone_verification') ?? 0;
 
@@ -78,11 +80,19 @@ class ConfigController extends Controller
         } elseif ($phoneVerification == 1) {
             $type = ($firebaseOTPVerification && $firebaseOTPVerification['status'] == 1) ? 'firebase' : 'phone';
             $status = 1;
+        } elseif ($whatsappOtpEnabled) {
+            $status = 1;
+            $type = 'whatsapp';
         }
 
         $customerVerification = [
             'status' => $status,
             'type' => $type,
+        ];
+
+        $whatsappOtpPublic = [
+            'status' => $whatsappOtpEnabled ? 1 : 0,
+            'channel' => $whatsappOtpEnabled ? 'whatsapp' : '',
         ];
 
         return response()->json([
@@ -183,6 +193,7 @@ class ConfigController extends Controller
             'add_fund_to_wallet' => (integer)(Helpers::get_business_settings('add_fund_to_wallet') ?? 0),
             'apple_login' => $appleLogin,
             'firebase_otp_verification_status' => (integer)($firebaseOTPVerification ? $firebaseOTPVerification['status'] : 0),
+            'whatsapp_otp' => $whatsappOtpPublic,
             'customer_verification' => $customerVerification,
             'order_image_status' => (integer)(Helpers::get_business_settings('order_image_status')?? 0),
             'order_image_label_name' => Helpers::get_business_settings('order_image_label_name')?? '',

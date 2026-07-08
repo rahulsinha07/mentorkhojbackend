@@ -254,7 +254,7 @@
                                 </ul>
                             </li>
 
-                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/product*') || Request::is('admin/attribute*')?'active':''}}">
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/product*') || Request::is('admin/attribute*') || Request::is('admin/mentor*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link nav-link-toggle"
                                    href="javascript:"
                                    title="{{translate('product setup')}}"
@@ -264,7 +264,7 @@
                                         class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{translate('product setup')}}</span>
                                 </a>
                                 <ul class="js-navbar-vertical-aside-submenu nav nav-sub"
-                                    style="display: {{Request::is('admin/product*') || Request::is('admin/attribute*') ? 'block' : 'none'}}">
+                                    style="display: {{Request::is('admin/product*') || Request::is('admin/attribute*') || Request::is('admin/mentor*') ? 'block' : 'none'}}">
 
                                     <li class="nav-item {{Request::is('admin/attribute*')?'active':''}}">
                                         <a class="nav-link"
@@ -302,6 +302,13 @@
                                            title="{{translate('Limited Stocks')}}">
                                             <span class="tio-circle nav-indicator-icon"></span>
                                             <span class="text-truncate">{{translate('Limited Stocks')}}</span>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item {{Request::is('admin/mentor/list')?'active':''}}">
+                                        <a class="nav-link" href="{{route('admin.mentor.list')}}"
+                                           title="{{translate('mentor list')}}">
+                                            <span class="tio-circle nav-indicator-icon"></span>
+                                            <span class="text-truncate">{{translate('mentor list')}}</span>
                                         </a>
                                     </li>
                                 </ul>

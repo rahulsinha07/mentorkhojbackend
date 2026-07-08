@@ -4,6 +4,7 @@ namespace App;
 
 use App\Model\CustomerAddress;
 use App\Model\FavoriteProduct;
+use App\Model\Mentor\Mentor;
 use App\Model\Order;
 use App\Model\SearchedKeywordUser;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -48,6 +49,12 @@ class User extends Authenticatable
 
     public function orders(){
         return $this->hasMany(Order::class,'user_id');
+    }
+
+    public function mentorProfile()
+    {
+        // Mentor profile exists when this user has created a mentor page.
+        return $this->hasOne(Mentor::class, 'user_id');
     }
 
     public function visited_products(): HasMany
