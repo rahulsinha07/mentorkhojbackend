@@ -11,6 +11,15 @@ class MentorShareTemplateSeeder extends Seeder
     {
         $templates = [
             [
+                'slug' => 'profile-card',
+                'title' => "Let's connect",
+                'subtitle' => 'Personal profile card',
+                'poster_image' => 'profile-card',
+                'default_caption' => "Hey folks! I've been getting a lot of DMs for guidance, so decided to take action on it. I'm excited to help folks out and give back to the community via MentorKhoj. Don't hesitate to reach out if you have any questions or just want to say hi!",
+                'hashtags' => json_encode(['MentorKhoj', 'Mentorship', 'CareerGrowth']),
+                'sort_order' => 0,
+            ],
+            [
                 'slug' => 'new-announcement',
                 'title' => 'New Announcement Poster',
                 'subtitle' => 'Converts Better',

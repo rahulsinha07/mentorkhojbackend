@@ -77,12 +77,12 @@ class ConfigController extends Controller
         if ($emailVerification == 1) {
             $status = 1;
             $type = 'email';
-        } elseif ($phoneVerification == 1) {
-            $type = ($firebaseOTPVerification && $firebaseOTPVerification['status'] == 1) ? 'firebase' : 'phone';
-            $status = 1;
         } elseif ($whatsappOtpEnabled) {
             $status = 1;
             $type = 'whatsapp';
+        } elseif ($phoneVerification == 1) {
+            $type = ($firebaseOTPVerification && $firebaseOTPVerification['status'] == 1) ? 'firebase' : 'phone';
+            $status = 1;
         }
 
         $customerVerification = [

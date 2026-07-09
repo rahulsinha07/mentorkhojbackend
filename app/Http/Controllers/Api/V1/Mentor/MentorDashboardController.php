@@ -258,9 +258,18 @@ class MentorDashboardController extends Controller
         $hashStr = implode(' ', array_map(fn ($h) => '#' . ltrim($h, '#'), $hashtags));
         $fullText = trim($caption . "\n\n" . $hashStr . "\n\n" . $profileUrl);
 
+        $landingUrl = rtrim(config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/')
+            . '/share/' . urlencode($templateSlug)
+            . '?mentor=' . urlencode($mentor->username);
+
         $shareUrl = $channel === 'linkedin'
-            ? 'https://www.linkedin.com/sharing/share-offsite/?url=' . urlencode($profileUrl)
+            ? 'https://www.linkedin.com/sharing/share-offsite/?url=' . urlencode($landingUrl)
             : 'https://wa.me/?text=' . urlencode($fullText);
+
+        $posterPath = $templateSlug === 'profile-card'
+            ? '/api/og/mentor-card/' . urlencode($mentor->username)
+            : '/share-posters/' . ($template->poster_image ?: $templateSlug . '.png');
+        $siteBase = rtrim(config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
 
         return response()->json([
             'profile_url' => $profileUrl,
@@ -269,7 +278,8 @@ class MentorDashboardController extends Controller
             'full_text' => $fullText,
             'share_url' => $shareUrl,
             'channel' => $channel,
-            'poster_preview_url' => $template->poster_image,
+            'poster_preview_url' => $siteBase . $posterPath,
+            'share_landing_url' => $landingUrl,
             'template' => ['slug' => $template->slug, 'title' => $template->title],
         ]);
     }
