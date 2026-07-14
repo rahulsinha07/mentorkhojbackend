@@ -253,13 +253,20 @@
                                 <div class="row g-2 mb-3">
                                     @foreach($images as $img)
                                         @php
+                                            $fileExists = \App\CentralLogics\MentorImageService::fileExists($img);
                                             $imageUrl = filter_var($img, FILTER_VALIDATE_URL)
                                                 ? $img
-                                                : asset('storage/app/public/product/' . $img);
+                                                : \App\CentralLogics\MentorImageService::publicAssetUrl($img);
                                         @endphp
                                         <div class="col-6">
-                                            <img src="{{ $imageUrl }}" class="img-fluid rounded border" alt=""
-                                                 onerror="this.src='{{ asset('public/assets/admin/img/400x400/img2.jpg') }}'">
+                                            @if($fileExists && $imageUrl)
+                                                <img src="{{ $imageUrl }}" class="img-fluid rounded border" alt="">
+                                            @else
+                                                <div class="rounded border border-danger bg-light p-4 text-center">
+                                                    <p class="text-danger small mb-2">{{ translate('Photo file missing on server') }}</p>
+                                                    <p class="text-muted small mb-0">{{ $img }}</p>
+                                                </div>
+                                            @endif
                                             @if($img !== 'default.png')
                                                 <label class="custom-control custom-checkbox mt-1">
                                                     <input type="checkbox" name="remove_images[]" value="{{ $img }}" class="custom-control-input">

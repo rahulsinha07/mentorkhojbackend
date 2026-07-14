@@ -129,12 +129,17 @@ class MentorController extends Controller
             MentorLogic::normalizeSocialLinks($request->input('social_links', []))
         );
 
-        $existing = $mentor->images_array;
+        $existing = MentorImageService::existingFilenames($mentor->images_array);
         $remove = $request->input('remove_images', []);
         $newFiles = $request->file('images') ?? [];
-        if (!empty($newFiles) || !empty($remove)) {
-            $merged = MentorImageService::merge($existing, $remove, $newFiles);
-            $mentor->images = json_encode($merged ?: ['default.png']);
+        try {
+            if (!empty($newFiles) || !empty($remove) || $existing !== $mentor->images_array) {
+                $merged = MentorImageService::merge($existing, $remove, $newFiles);
+                $mentor->images = json_encode($merged ?: ['default.png']);
+            }
+        } catch (\RuntimeException $e) {
+            Toastr::error($e->getMessage());
+            return back()->withInput();
         }
 
         $mentor->save();

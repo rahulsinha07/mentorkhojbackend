@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Mentor;
 
 use App\CentralLogics\Helpers;
+use App\CentralLogics\MentorImageService;
 use App\CentralLogics\MentorLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Mentor\Mentor;
@@ -10,6 +11,7 @@ use App\Model\Mentor\MentorShareTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\Response;
 
 class MentorPublicController extends Controller
 {
@@ -63,6 +65,21 @@ class MentorPublicController extends Controller
         $mentor->load('enabledServices');
 
         return response()->json(MentorLogic::formatPublic($mentor));
+    }
+
+    public function photo(string $usernameOrId): Response
+    {
+        $mentor = MentorLogic::resolveMentor($usernameOrId);
+        if (!$mentor || !$mentor->is_published || $mentor->status !== 'active') {
+            return response()->json(['errors' => [['code' => 'not_found', 'message' => 'Mentor not found']]], 404);
+        }
+
+        $response = MentorImageService::streamFirstPhoto($mentor);
+        if (!$response) {
+            return response()->json(['errors' => [['code' => 'not_found', 'message' => 'Photo not found']]], 404);
+        }
+
+        return $response;
     }
 
     public function services(string $usernameOrId): JsonResponse

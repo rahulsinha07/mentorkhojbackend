@@ -16,8 +16,9 @@ Route::group(['namespace' => 'Api\V1\Mentor'], function () {
         Route::get('/', [MentorPublicController::class, 'index']);
         Route::get('check-username/{username}', [MentorPublicController::class, 'checkUsername']);
         Route::get('share-templates', [MentorPublicController::class, 'shareTemplates']);
-        Route::get('{usernameOrId}', [MentorPublicController::class, 'show']);
+        Route::get('{usernameOrId}/photo', [MentorPublicController::class, 'photo']);
         Route::get('{usernameOrId}/services', [MentorPublicController::class, 'services']);
+        Route::get('{usernameOrId}', [MentorPublicController::class, 'show']);
 
         Route::group(['middleware' => ['auth:api', 'customer_is_block']], function () {
             Route::post('{id}/book', [MentorBookingController::class, 'book']);

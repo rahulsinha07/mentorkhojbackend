@@ -50,19 +50,13 @@
                             </thead>
                             <tbody>
                             @foreach($mentors as $key => $mentor)
-                                @php
-                                    $images = $mentor->images_array;
-                                    $image = count($images) ? $images[0] : 'def.png';
-                                    $imageUrl = $image && filter_var($image, FILTER_VALIDATE_URL)
-                                        ? $image
-                                        : asset('storage/app/public/product/' . $image);
-                                @endphp
+                                @php $thumb = \App\CentralLogics\MentorImageService::adminListThumbnail($mentor); @endphp
                                 <tr>
                                     <td>{{ $mentors->firstItem() + $key }}</td>
                                     <td>
                                         <div class="product-list-media">
-                                            <img src="{{ $imageUrl }}"
-                                                 onerror="this.src='{{ asset('public/assets/admin/img/400x400/img2.jpg') }}'"
+                                            <img src="{{ $thumb['url'] }}"
+                                                 class="{{ $thumb['missing'] ? 'border border-danger' : '' }}"
                                                  alt="">
                                             <h6 class="name line--limit-2">
                                                 {{ \Illuminate\Support\Str::limit($mentor->display_name ?? $mentor->username, 28, '...') }}
