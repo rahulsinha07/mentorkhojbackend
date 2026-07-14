@@ -26,6 +26,7 @@ use App\Http\Controllers\Admin\LanguageController;
 use App\Http\Controllers\Admin\LocationSettingsController;
 use App\Http\Controllers\Admin\LoyaltyPointController;
 use App\Http\Controllers\Admin\MentorController;
+use App\Http\Controllers\Admin\MentorBookingController;
 use App\Http\Controllers\Admin\SeminarController;
 use App\Http\Controllers\Admin\InternshipController;
 use App\Http\Controllers\Admin\NotificationController;
@@ -195,6 +196,8 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
 
         Route::group(['prefix' => 'mentor', 'as' => 'mentor.','middleware'=>['module:product_management']], function () {
             Route::get('list', [MentorController::class, 'list'])->name('list');
+            Route::get('bookings', [MentorBookingController::class, 'list'])->name('bookings.list');
+            Route::get('bookings/{id}', [MentorBookingController::class, 'show'])->name('bookings.show');
             Route::get('edit/{id}', [MentorController::class, 'edit'])->name('edit');
             Route::post('update/{id}', [MentorController::class, 'update'])->name('update');
             Route::get('status/{id}/{status}', [MentorController::class, 'status'])->name('status');

@@ -6,9 +6,11 @@ use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorBookingLogic;
 use App\CentralLogics\MentorLogic;
 use App\Http\Controllers\Controller;
+use App\Model\Branch;
 use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorBooking;
 use App\Model\Mentor\MentorService;
+use App\Model\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -109,6 +111,36 @@ class MentorBookingController extends Controller
         return response()->json([
             'message' => 'Booking updated',
             'booking' => MentorBookingLogic::formatBooking($booking),
+        ]);
+    }
+
+    public function checkoutContext(Request $request, int $id): JsonResponse
+    {
+        $booking = MentorBooking::with(['service', 'mentor'])->find($id);
+        if (!$booking || (int) $booking->mentee_user_id !== (int) $request->user()->id) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        $mentor = $booking->mentor;
+        $legacyProductId = $mentor?->legacy_product_id;
+        $product = $legacyProductId ? Product::find($legacyProductId) : null;
+        $branch = Branch::active()->first();
+
+        return response()->json([
+            'booking' => MentorBookingLogic::formatBooking($booking),
+            'legacy_product_id' => $legacyProductId,
+            'variation_type' => $booking->service
+                ? preg_replace('/\s+/', '', $booking->service->title)
+                : null,
+            'product' => $product ? [
+                'id' => $product->id,
+                'name' => $product->name,
+                'price' => $product->price,
+                'tax' => $product->tax,
+                'tax_type' => $product->tax_type,
+            ] : null,
+            'branch_id' => $branch?->id,
+            'wallet_balance' => (float) ($request->user()->wallet_balance ?? 0),
         ]);
     }
 }

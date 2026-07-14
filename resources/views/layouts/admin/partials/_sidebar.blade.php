@@ -312,13 +312,22 @@
                                 <small class="tio-more-horizontal nav-subtitle-replacer"></small>
                             </li>
 
-                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/mentor*')?'active':''}}">
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/mentor/list*') || Request::is('admin/mentor/edit*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link"
                                    href="{{route('admin.mentor.list')}}"
                                    title="{{ translate('Mentors') }}"
                                 >
                                     <i class="tio-user-big-outlined nav-icon"></i>
                                     <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{ translate('Mentor list') }}</span>
+                                </a>
+                            </li>
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/mentor/bookings*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.mentor.bookings.list')}}"
+                                   title="{{ translate('Mentor Bookings') }}"
+                                >
+                                    <i class="tio-calendar nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{ translate('Mentor Bookings') }}</span>
                                 </a>
                             </li>
                         @endif

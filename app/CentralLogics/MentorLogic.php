@@ -89,6 +89,7 @@ class MentorLogic
         return [
             'id' => $mentor->id,
             'username' => $mentor->username,
+            'legacy_product_id' => $mentor->legacy_product_id,
             'name' => $mentor->display_name,
             'display_name' => $mentor->display_name,
             'headline' => $mentor->headline,

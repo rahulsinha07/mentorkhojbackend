@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\CentralLogics\Helpers;
 use App\CentralLogics\InternshipLogic;
+use App\CentralLogics\MentorKhojRevalidateLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Internship\Internship;
 use App\Model\Internship\InternshipApplication;
@@ -86,6 +87,8 @@ class InternshipController extends Controller
         $internship->sort_order = (int) ($request->sort_order ?? 0);
         $internship->save();
 
+        MentorKhojRevalidateLogic::revalidateInternships();
+
         Toastr::success(translate('Internship added successfully!'));
         return redirect()->route('admin.internship.list');
     }
@@ -123,6 +126,8 @@ class InternshipController extends Controller
         $internship->sort_order = (int) ($request->sort_order ?? 0);
         $internship->save();
 
+        MentorKhojRevalidateLogic::revalidateInternships();
+
         Toastr::success(translate('Internship updated successfully!'));
         return redirect()->route('admin.internship.list');
     }
@@ -137,6 +142,8 @@ class InternshipController extends Controller
 
         $internship->status = $request->status === 'active' ? 'active' : 'paused';
         $internship->save();
+
+        MentorKhojRevalidateLogic::revalidateInternships();
 
         Toastr::success(translate('Internship status updated!'));
         return back();
@@ -153,6 +160,8 @@ class InternshipController extends Controller
         $internship->is_published = (bool) $request->is_published;
         $internship->save();
 
+        MentorKhojRevalidateLogic::revalidateInternships();
+
         Toastr::success(translate('Internship publish status updated!'));
         return back();
     }
@@ -167,6 +176,8 @@ class InternshipController extends Controller
 
         $internship->applications()->update(['internship_id' => null]);
         $internship->delete();
+
+        MentorKhojRevalidateLogic::revalidateInternships();
 
         Toastr::success(translate('Internship removed!'));
         return back();

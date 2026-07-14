@@ -64,7 +64,7 @@
             <div class="col-lg-4 col-md-4 col-sm-6">
                 <div class="resturant-card bg--3">
                     <img class="resturant-icon" src="{{asset('/public/assets/admin/img/dashboard/3.png')}}" alt="{{ translate('image') }}">
-                    <div class="for-card-text font-weight-bold  text-uppercase mb-1">{{translate('Total Orders')}}</div>
+                    <div class="for-card-text font-weight-bold  text-uppercase mb-1">{{translate('Mentor Sessions')}}</div>
                     <div class="for-card-count">{{ $bookingStats['count'] ?? 0 }}</div>
                 </div>
             </div>

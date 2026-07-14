@@ -22,6 +22,7 @@ Route::group(['namespace' => 'Api\V1\Mentor'], function () {
 
         Route::group(['middleware' => ['auth:api', 'customer_is_block']], function () {
             Route::post('{id}/book', [MentorBookingController::class, 'book']);
+            Route::get('my/bookings/{id}/checkout-context', [MentorBookingController::class, 'checkoutContext']);
             Route::get('my/bookings', [MentorBookingController::class, 'myBookings']);
             Route::get('my/favorites', [MentorFavoriteController::class, 'index']);
             Route::post('{id}/favorite', [MentorFavoriteController::class, 'store']);

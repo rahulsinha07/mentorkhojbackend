@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Model\Branch;
 use App\Model\BusinessSetting;
 use App\Model\DeliveryMan;
+use App\Model\Mentor\MentorBooking;
 use App\Model\Order;
 use App\Model\OrderDetail;
 use App\Model\Product;
@@ -121,7 +122,10 @@ class OrderController extends Controller
             })->get();
 
         if (isset($order)) {
-            return view('admin-views.order.order-view', compact('order', 'deliverymanList'));
+            $mentorBookings = MentorBooking::with(['mentor', 'service'])
+                ->where('legacy_order_id', $order->id)
+                ->get();
+            return view('admin-views.order.order-view', compact('order', 'deliverymanList', 'mentorBookings'));
         } else {
             Toastr::info(translate('No more orders!'));
             return back();
@@ -301,6 +305,7 @@ class OrderController extends Controller
 
         $order->order_status = $request->order_status;
         $order->save();
+        \App\CentralLogics\MentorBookingLogic::syncBookingsForOrder($order);
 
         $message = Helpers::order_status_update_message($request->order_status);
         $languageCode = $order->is_guest == 0 ? ($order->customer ? $order->customer->language_code : 'en') : ($order->guest ? $order->guest->language_code : 'en');
@@ -466,6 +471,7 @@ class OrderController extends Controller
         }
         $order->payment_status = $request->payment_status;
         $order->save();
+        \App\CentralLogics\MentorBookingLogic::syncBookingsForOrder($order);
         Toastr::success(translate('Payment status updated!'));
         return back();
     }

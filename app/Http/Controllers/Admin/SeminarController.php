@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\CentralLogics\Helpers;
+use App\CentralLogics\MentorKhojRevalidateLogic;
 use App\CentralLogics\SeminarLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Seminar\Seminar;
@@ -88,6 +89,8 @@ class SeminarController extends Controller
         $seminar->sort_order = (int) ($request->sort_order ?? 0);
         $seminar->save();
 
+        MentorKhojRevalidateLogic::revalidateSeminar($seminar->slug);
+
         Toastr::success(translate('Seminar added successfully!'));
         return redirect()->route('admin.seminar.list');
     }
@@ -127,6 +130,8 @@ class SeminarController extends Controller
         $seminar->sort_order = (int) ($request->sort_order ?? 0);
         $seminar->save();
 
+        MentorKhojRevalidateLogic::revalidateSeminar($seminar->slug);
+
         Toastr::success(translate('Seminar updated successfully!'));
         return redirect()->route('admin.seminar.list');
     }
@@ -141,6 +146,8 @@ class SeminarController extends Controller
 
         $seminar->status = $request->status === 'active' ? 'active' : 'paused';
         $seminar->save();
+
+        MentorKhojRevalidateLogic::revalidateSeminar($seminar->slug);
 
         Toastr::success(translate('Seminar status updated!'));
         return back();
@@ -157,6 +164,8 @@ class SeminarController extends Controller
         $seminar->is_published = (bool) $request->is_published;
         $seminar->save();
 
+        MentorKhojRevalidateLogic::revalidateSeminar($seminar->slug);
+
         Toastr::success(translate('Seminar publish status updated!'));
         return back();
     }
@@ -169,8 +178,11 @@ class SeminarController extends Controller
             return back();
         }
 
+        $slug = $seminar->slug;
         $seminar->registrations()->delete();
         $seminar->delete();
+
+        MentorKhojRevalidateLogic::revalidateSeminar($slug);
 
         Toastr::success(translate('Seminar removed!'));
         return back();

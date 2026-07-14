@@ -374,6 +374,16 @@ class OrderController extends Controller
                 self::uploadOrderImage(orderImages: $request->order_images, orderId: $orderId);
             }
 
+            $order = $this->order->find($orderId);
+
+            if ($order && !empty($request['mentor_booking_ids']) && is_array($request['mentor_booking_ids'])) {
+                \App\CentralLogics\MentorBookingLogic::syncBookingsFromLegacyOrder(
+                    $request['mentor_booking_ids'],
+                    $order,
+                    (bool) auth('api')->user() ? auth('api')->user()->id : null
+                );
+            }
+
             DB::commit();
 
             if ((bool)auth('api')->user()){

@@ -344,6 +344,51 @@
                         </div>
                     </div>
                 </div>
+
+                @if(!empty($mentorBookings) && $mentorBookings->count())
+                <div class="card mb-3 mb-lg-5">
+                    <div class="card-header border-0">
+                        <h4 class="card-title">{{translate('Mentor session bookings')}}</h4>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-borderless table-nowrap table-align-middle card-table mb-0">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>{{translate('Booking ID')}}</th>
+                                        <th>{{translate('Mentor')}}</th>
+                                        <th>{{translate('Service')}}</th>
+                                        <th>{{translate('Date')}}</th>
+                                        <th>{{translate('Payment')}}</th>
+                                        <th>{{translate('Action')}}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($mentorBookings as $booking)
+                                    <tr>
+                                        <td>#{{ $booking->id }}</td>
+                                        <td>{{ $booking->mentor->display_name ?? '—' }}</td>
+                                        <td>{{ $booking->service->title ?? '—' }}</td>
+                                        <td>
+                                            {{ $booking->preferred_date ? $booking->preferred_date->format('Y-m-d') : '—' }}
+                                            @if($booking->preferred_time)
+                                                {{ $booking->preferred_time }}
+                                            @endif
+                                        </td>
+                                        <td><span class="badge badge-soft-info text-capitalize">{{ $booking->payment_status }}</span></td>
+                                        <td>
+                                            <a href="{{ route('admin.mentor.bookings.show', $booking->id) }}" class="btn btn-sm btn-outline-primary">
+                                                {{translate('View')}}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                @endif
             </div>
 
 
