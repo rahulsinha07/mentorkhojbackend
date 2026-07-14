@@ -254,7 +254,7 @@
                                 </ul>
                             </li>
 
-                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/product*') || Request::is('admin/attribute*') || Request::is('admin/mentor*')?'active':''}}">
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/product*') || Request::is('admin/attribute*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link nav-link-toggle"
                                    href="javascript:"
                                    title="{{translate('product setup')}}"
@@ -264,7 +264,7 @@
                                         class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{translate('product setup')}}</span>
                                 </a>
                                 <ul class="js-navbar-vertical-aside-submenu nav nav-sub"
-                                    style="display: {{Request::is('admin/product*') || Request::is('admin/attribute*') || Request::is('admin/mentor*') ? 'block' : 'none'}}">
+                                    style="display: {{Request::is('admin/product*') || Request::is('admin/attribute*') ? 'block' : 'none'}}">
 
                                     <li class="nav-item {{Request::is('admin/attribute*')?'active':''}}">
                                         <a class="nav-link"
@@ -304,14 +304,22 @@
                                             <span class="text-truncate">{{translate('Limited Stocks')}}</span>
                                         </a>
                                     </li>
-                                    <li class="nav-item {{Request::is('admin/mentor/list')?'active':''}}">
-                                        <a class="nav-link" href="{{route('admin.mentor.list')}}"
-                                           title="{{translate('mentor list')}}">
-                                            <span class="tio-circle nav-indicator-icon"></span>
-                                            <span class="text-truncate">{{translate('mentor list')}}</span>
-                                        </a>
-                                    </li>
                                 </ul>
+                            </li>
+
+                            <li class="nav-item">
+                                <small class="nav-subtitle">{{ translate('Mentors') }}</small>
+                                <small class="tio-more-horizontal nav-subtitle-replacer"></small>
+                            </li>
+
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/mentor*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.mentor.list')}}"
+                                   title="{{ translate('Mentors') }}"
+                                >
+                                    <i class="tio-user-big-outlined nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{ translate('Mentor list') }}</span>
+                                </a>
                             </li>
                         @endif
 
@@ -331,6 +339,56 @@
                                     <span
                                         class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{translate('banner')}}</span>
                                 </a>
+                            </li>
+
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/seminar*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link nav-link-toggle"
+                                   href="javascript:"
+                                   title="Seminars"
+                                >
+                                    <i class="tio-calendar nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">Seminars</span>
+                                </a>
+                                <ul class="js-navbar-vertical-aside-submenu nav nav-sub"
+                                    style="display: {{Request::is('admin/seminar*') ? 'block' : 'none'}}">
+                                    <li class="nav-item {{Request::is('admin/seminar/list') || Request::is('admin/seminar/add') || Request::is('admin/seminar/edit*') ? 'active' : ''}}">
+                                        <a class="nav-link" href="{{route('admin.seminar.list')}}" title="Manage seminars">
+                                            <span class="tio-circle nav-indicator-icon"></span>
+                                            <span class="text-truncate">Manage seminars</span>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item {{Request::is('admin/seminar/registrations*') ? 'active' : ''}}">
+                                        <a class="nav-link" href="{{route('admin.seminar.registrations')}}" title="Seminar registrations">
+                                            <span class="tio-circle nav-indicator-icon"></span>
+                                            <span class="text-truncate">Registrations</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/internship*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link nav-link-toggle"
+                                   href="javascript:"
+                                   title="Internships"
+                                >
+                                    <i class="tio-briefcase nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">Internships</span>
+                                </a>
+                                <ul class="js-navbar-vertical-aside-submenu nav nav-sub"
+                                    style="display: {{Request::is('admin/internship*') ? 'block' : 'none'}}">
+                                    <li class="nav-item {{Request::is('admin/internship/list') || Request::is('admin/internship/add') || Request::is('admin/internship/edit*') ? 'active' : ''}}">
+                                        <a class="nav-link" href="{{route('admin.internship.list')}}" title="Manage internships">
+                                            <span class="tio-circle nav-indicator-icon"></span>
+                                            <span class="text-truncate">Manage internships</span>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item {{Request::is('admin/internship/applications*') ? 'active' : ''}}">
+                                        <a class="nav-link" href="{{route('admin.internship.applications')}}" title="Internship applications">
+                                            <span class="tio-circle nav-indicator-icon"></span>
+                                            <span class="text-truncate">Applications</span>
+                                        </a>
+                                    </li>
+                                </ul>
                             </li>
 
                             <li class="navbar-vertical-aside-has-menu {{Request::is('admin/coupon*')?'active':''}}">

@@ -97,7 +97,13 @@
                                     </td>
                                     <td>
                                         <div class="btn--container justify-content-center">
-                                            <a class="action-btn" href="{{ \App\CentralLogics\MentorLogic::profileUrl($mentor) }}" target="_blank">
+                                            <a class="action-btn btn--primary btn-outline-primary" href="{{ route('admin.mentor.edit', $mentor->id) }}" title="{{ translate('Edit') }}">
+                                                <i class="tio-edit"></i>
+                                            </a>
+                                            @php
+                                                $profileSite = rtrim(config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
+                                            @endphp
+                                            <a class="action-btn" href="{{ $profileSite . '/mentor/' . $mentor->username }}" target="_blank" title="{{ translate('View') }}">
                                                 <i class="tio-visible-outlined"></i>
                                             </a>
                                             <a class="action-btn btn--danger btn-outline-danger" href="javascript:"

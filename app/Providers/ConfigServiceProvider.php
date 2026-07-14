@@ -31,7 +31,7 @@ class ConfigServiceProvider extends ServiceProvider
 
         try {
             $emailServices = Helpers::get_business_settings('mail_config');
-            if ($emailServices) {
+            if ($emailServices && ($emailServices['status'] ?? 0) == 1) {
                 $config = array(
                     'driver' => $emailServices['driver'],
                     'host' => $emailServices['host'],

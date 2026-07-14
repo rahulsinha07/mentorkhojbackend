@@ -28,7 +28,10 @@ class MentorPublicController extends Controller
 
         if ($request->filled('category_id')) {
             $catId = (int) $request->category_id;
-            $query->where('category_ids', 'like', '%"id":' . $catId . '%');
+            $query->where(function ($q) use ($catId) {
+                $q->where('category_ids', 'like', '%"id":' . $catId . '%')
+                    ->orWhere('category_ids', 'like', '%"id":"' . $catId . '"%');
+            });
         }
 
         $limit = (int) ($request->limit ?? 20);

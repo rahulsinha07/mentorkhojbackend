@@ -56,7 +56,7 @@ class MentorLogic
 
     public static function profileUrl(Mentor $mentor): string
     {
-        $site = env('APP_URL', 'https://www.mentorkhoj.com');
+        $site = config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com');
         return rtrim($site, '/') . '/mentor/' . $mentor->username;
     }
 

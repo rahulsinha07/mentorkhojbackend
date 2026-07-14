@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\CentralLogics\AccountTypeLogic;
+use App\CentralLogics\CustomerBookingStats;
 use App\CentralLogics\Helpers;
 use App\Http\Controllers\Controller;
 use App\Model\Conversation;
@@ -17,6 +19,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -40,11 +43,14 @@ class CustomerController extends Controller
     {
         $queryParam = [];
         $search = $request['search'];
+        $baseQuery = CustomerBookingStats::applyListAggregates(
+            $this->user->with(['mentorProfile'])
+        );
+
         if($request->has('search'))
         {
             $key = explode(' ', $request['search']);
-            $customers = $this->user->with(['orders','mentorProfile'])->
-                    where(function ($q) use ($key) {
+            $customers = $baseQuery->where(function ($q) use ($key) {
                         foreach ($key as $value) {
                             $q->orWhere('f_name', 'like', "%{$value}%")
                                 ->orWhere('l_name', 'like', "%{$value}%")
@@ -54,7 +60,7 @@ class CustomerController extends Controller
             });
             $queryParam = ['search' => $request['search']];
         }else{
-            $customers = $this->user->with(['orders','mentorProfile']);
+            $customers = $baseQuery;
         }
         $customers = $customers->latest()->paginate(Helpers::getPagination())->appends($queryParam);
 
@@ -87,8 +93,10 @@ class CustomerController extends Controller
                 $orders = $this->order->where(['user_id' => $id]);
             }
             $orders = $orders->latest()->paginate(Helpers::getPagination())->appends($queryParam);
+            $customer->load('mentorProfile');
+            $bookingStats = CustomerBookingStats::forUser((int) $id);
 
-            return view('admin-views.customer.customer-view', compact('customer', 'orders', 'search'));
+            return view('admin-views.customer.customer-view', compact('customer', 'orders', 'search', 'bookingStats'));
         }
         Toastr::error(translate('Customer not found!'));
         return back();
@@ -206,6 +214,46 @@ class CustomerController extends Controller
 
     /**
      * @param Request $request
+     * @param int $id
+     * @return RedirectResponse
+     */
+    public function resetPassword(Request $request, int $id): RedirectResponse
+    {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'password' => 'required|min:8|confirmed',
+        ]);
+
+        if ($validator->fails()) {
+            Toastr::error($validator->errors()->first());
+            return back();
+        }
+
+        $customer = $this->user->find($id);
+        if (!$customer) {
+            Toastr::error(translate('Customer not found!'));
+            return back();
+        }
+
+        $customer->password = bcrypt($request->password);
+        $customer->save();
+
+        if ($request->boolean('notify_customer') && $customer->email) {
+            try {
+                $emailServices = Helpers::get_business_settings('mail_config');
+                if (isset($emailServices['status']) && $emailServices['status'] == 1) {
+                    $name = trim(($customer->f_name ?? '') . ' ' . ($customer->l_name ?? ''));
+                    Mail::to($customer->email)->send(new \App\Mail\Customer\AdminPasswordReset($name, $request->password));
+                }
+            } catch (\Exception $e) {
+            }
+        }
+
+        Toastr::success(translate('Password updated successfully'));
+        return back();
+    }
+
+    /**
+     * @param Request $request
      * @return StreamedResponse|string
      * @throws IOException
      * @throws InvalidArgumentException
@@ -218,7 +266,9 @@ class CustomerController extends Controller
         $queryParam = [];
         $search = $request['search'];
 
-        $customers = $this->user->with('mentorProfile')->when($request->has('search'), function ($query) use ($request) {
+        $customers = CustomerBookingStats::applyListAggregates(
+            $this->user->with('mentorProfile')
+        )->when($request->has('search'), function ($query) use ($request) {
                 $key = explode(' ', $request['search']);
                 $query->where(function ($q) use ($key) {
                     foreach ($key as $value) {
@@ -228,7 +278,6 @@ class CustomerController extends Controller
                             ->orWhere('email', 'like', "%{$value}%");
                     }
                 });
-                $queryParam = ['search' => $request['search']];
             })
             ->get();
 
@@ -239,7 +288,13 @@ class CustomerController extends Controller
                 'last_name' => $customer['l_name'],
                 'phone' => $customer['phone'],
                 'email' => $customer['email'],
-                'role' => $customer->mentorProfile ? 'Mentor' : 'Mentee',
+                'account_type' => AccountTypeLogic::accountTypeLabel($customer->account_type ?? null),
+                'mentor_username' => $customer->mentorProfile?->username,
+                'last_login_portal' => AccountTypeLogic::loginPortalLabel($customer->last_login_as ?? null),
+                'last_login_at' => $customer->last_login_at?->format('Y-m-d H:i'),
+                'login_method' => AccountTypeLogic::loginMediumLabel($customer->login_medium ?? null),
+                'total_bookings' => (int) ($customer->bookings_count ?? 0),
+                'total_booking_amount' => (float) ($customer->bookings_amount ?? 0),
             ];
         }
         return (new FastExcel($storage))->download('customers.xlsx');

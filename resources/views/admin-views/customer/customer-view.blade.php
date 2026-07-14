@@ -26,7 +26,17 @@
                     </span>
                 </div>
 
-                <div class="col-auto ml-auto">
+                <div class="col-auto ml-auto d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-sm btn--primary" data-toggle="modal" data-target="#resetPasswordModal"
+                            data-customer-id="{{ $customer->id }}"
+                            data-customer-name="{{ $customer->f_name }} {{ $customer->l_name }}">
+                        <i class="tio-key"></i> {{ translate('Reset password') }}
+                    </button>
+                    @if($customer->mentorProfile)
+                        <a class="btn btn-sm btn-soft-info" href="{{ route('admin.mentor.edit', [$customer->mentorProfile->id]) }}">
+                            <i class="tio-edit"></i> {{ translate('Edit mentor profile') }}
+                        </a>
+                    @endif
                     <a class="btn btn-icon btn-sm btn-soft-secondary rounded-circle mr-1"
                        href="{{route('admin.customer.view',[$customer['id']-1])}}"
                        data-toggle="tooltip" data-placement="top" title="{{ translate('Previous customer') }}">
@@ -43,7 +53,7 @@
         <div class="row mb-2 g-2">
 
 
-            <div class="col-lg-6 col-md-6 col-sm-6">
+            <div class="col-lg-4 col-md-4 col-sm-6">
                 <div class="resturant-card bg--2">
                     <img class="resturant-icon" src="{{asset('/public/assets/admin/img/dashboard/1.png')}}" alt="{{ translate('image') }}">
                     <div class="for-card-text font-weight-bold  text-uppercase mb-1">{{translate('wallet')}} {{translate('balance')}}</div>
@@ -51,12 +61,19 @@
                 </div>
             </div>
 
-
-            <div class="col-lg-6 col-md-6 col-sm-6">
+            <div class="col-lg-4 col-md-4 col-sm-6">
                 <div class="resturant-card bg--3">
                     <img class="resturant-icon" src="{{asset('/public/assets/admin/img/dashboard/3.png')}}" alt="{{ translate('image') }}">
-                    <div class="for-card-text font-weight-bold  text-uppercase mb-1">{{translate('loyalty_point')}} {{translate('balance')}}</div>
-                    <div class="for-card-count">{{$customer->loyalty_point??0}}</div>
+                    <div class="for-card-text font-weight-bold  text-uppercase mb-1">{{translate('Total Orders')}}</div>
+                    <div class="for-card-count">{{ $bookingStats['count'] ?? 0 }}</div>
+                </div>
+            </div>
+
+            <div class="col-lg-4 col-md-4 col-sm-6">
+                <div class="resturant-card bg--4">
+                    <img class="resturant-icon" src="{{asset('/public/assets/admin/img/dashboard/2.png')}}" alt="{{ translate('image') }}">
+                    <div class="for-card-text font-weight-bold  text-uppercase mb-1">{{translate('Total Order Amount')}}</div>
+                    <div class="for-card-count">{{ Helpers::set_symbol($bookingStats['amount'] ?? 0) }}</div>
                 </div>
             </div>
         </div>
@@ -173,7 +190,7 @@
                                         </li>
                                         <li class="pb-1">
                                             <i class="tio-shopping-basket-outlined mr-2"></i>
-                                            {{$customer->orders->count()}} {{translate('orders')}}
+                                            {{ $bookingStats['count'] ?? 0 }} {{translate('bookings')}}
                                         </li>
                                     </ul>
                                 </div>
@@ -207,8 +224,71 @@
                         </div>
                 @endif
                 </div>
+
+                @if($customer)
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h4 class="card-header-title">{{ translate('Account & login') }}</h4>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled m-0">
+                            <li class="pb-2"><strong>{{ translate('Account type') }}:</strong> {{ \App\CentralLogics\AccountTypeLogic::accountTypeLabel($customer->account_type ?? null) }}</li>
+                            <li class="pb-2"><strong>{{ translate('Last login portal') }}:</strong> {{ \App\CentralLogics\AccountTypeLogic::loginPortalLabel($customer->last_login_as ?? null) }}</li>
+                            <li class="pb-2"><strong>{{ translate('Last login') }}:</strong> {{ $customer->last_login_at ? $customer->last_login_at->format('d M Y H:i') : '—' }}</li>
+                            <li class="pb-2"><strong>{{ translate('Auth method') }}:</strong> {{ \App\CentralLogics\AccountTypeLogic::loginMediumLabel($customer->login_medium ?? null) }}</li>
+                            @if($customer->referral_code)
+                                <li class="pb-2"><strong>{{ translate('Referral code') }}:</strong> {{ $customer->referral_code }}</li>
+                            @endif
+                            <li class="pb-2"><strong>{{ translate('Email verified') }}:</strong> {{ $customer->email_verified_at ? translate('yes') : translate('no') }}</li>
+                            @if($customer->mentorProfile)
+                                <li class="pb-2">
+                                    <strong>{{ translate('Public profile') }}:</strong>
+                                    <a href="{{ rtrim(config('app.mentorkhoj_site_url'), '/') . '/mentor/' . $customer->mentorProfile->username }}" target="_blank" rel="noopener">
+                                        @{{ $customer->mentorProfile->username }}
+                                    </a>
+                                </li>
+                            @endif
+                        </ul>
+                    </div>
+                </div>
+                @endif
             </div>
 
+        </div>
+    </div>
+
+    <div class="modal fade" id="resetPasswordModal" tabindex="-1" role="dialog" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <form method="post" id="resetPasswordForm" action="{{ route('admin.customer.reset-password', [$customer->id]) }}" class="modal-content">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title" id="resetPasswordModalLabel">{{ translate('Reset password') }}</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3" id="resetPasswordCustomerName">{{ translate('Customer') }}: {{ $customer->f_name }} {{ $customer->l_name }}</p>
+                    <div class="form-group">
+                        <label>{{ translate('New password') }}</label>
+                        <input type="password" name="password" class="form-control" minlength="8" required autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label>{{ translate('Confirm password') }}</label>
+                        <input type="password" name="password_confirmation" class="form-control" minlength="8" required autocomplete="new-password">
+                    </div>
+                    <div class="form-group mb-0">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="notifyCustomerPassword" name="notify_customer" value="1">
+                            <label class="custom-control-label" for="notifyCustomerPassword">{{ translate('Email new password to customer') }}</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ translate('Close') }}</button>
+                    <button type="submit" class="btn btn--primary">{{ translate('Update password') }}</button>
+                </div>
+            </form>
         </div>
     </div>
 @endsection

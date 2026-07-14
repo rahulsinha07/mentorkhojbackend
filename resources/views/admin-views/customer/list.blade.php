@@ -64,12 +64,13 @@
                 <table class="table table-borderless table-hover table-align-middle m-0 text-14px">
                     <thead class="thead-light">
                     <tr class="word-nobreak">
-                        <th>
-                            {{translate('#')}}
-                        </th>
+                        <th>{{translate('#')}}</th>
                         <th class="table-column-pl-0">{{translate('customer name')}}</th>
                         <th>{{translate('contact info')}}</th>
-                        <th class="text-center">{{translate('role')}}</th>
+                        <th class="text-center">{{translate('Account type')}}</th>
+                        <th class="text-center">{{translate('Mentor profile')}}</th>
+                        <th class="text-center">{{translate('Last login')}}</th>
+                        <th class="text-center">{{translate('Auth method')}}</th>
                         <th class="text-center">{{translate('Total Orders')}}</th>
                         <th class="text-center">{{translate('Total Order Amount')}}</th>
                         <th class="text-center">{{translate('status')}}</th>
@@ -79,9 +80,7 @@
                     <tbody id="set-rows">
                     @foreach($customers as $key=>$customer)
                         <tr>
-                            <td>
-                                {{$customers->firstItem()+$key}}
-                            </td>
+                            <td>{{$customers->firstItem()+$key}}</td>
                             <td class="table-column-pl-0">
                                 <a href="{{route('admin.customer.view',[$customer['id']])}}" class="product-list-media">
                                     <img class="rounded-full"
@@ -103,24 +102,41 @@
                                 </div>
                             </td>
                             <td class="text-center">
+                                @php($accountType = $customer->account_type ?? 'mentee')
+                                <span class="badge badge-soft-{{ $accountType === 'mentor' ? 'primary' : 'secondary' }} py-2 px-3 font-medium">
+                                    {{ \App\CentralLogics\AccountTypeLogic::accountTypeLabel($accountType) }}
+                                </span>
+                            </td>
+                            <td class="text-center">
                                 @if($customer->mentorProfile)
-                                    <span class="badge badge-soft-primary py-2 px-3 font-medium">{{translate('Mentor')}}</span>
+                                    <a href="{{ route('admin.mentor.edit', [$customer->mentorProfile->id]) }}" class="badge badge-soft-info py-2 px-3 font-medium">
+                                        @{{ $customer->mentorProfile->username }}
+                                    </a>
                                 @else
-                                    <span class="badge badge-soft-secondary py-2 px-3 font-medium">{{translate('Mentee')}}</span>
+                                    <span class="text-muted">—</span>
                                 @endif
+                            </td>
+                            <td class="text-center">
+                                <div>{{ \App\CentralLogics\AccountTypeLogic::loginPortalLabel($customer->last_login_as ?? null) }}</div>
+                                @if($customer->last_login_at)
+                                    <small class="text-muted">{{ $customer->last_login_at->diffForHumans() }}</small>
+                                @endif
+                            </td>
+                            <td class="text-center">
+                                {{ \App\CentralLogics\AccountTypeLogic::loginMediumLabel($customer->login_medium ?? null) }}
                             </td>
                             <td>
                                 <div class="text-center">
                                     <a href="{{route('admin.customer.view',[$customer['id']])}}">
                                         <span class="badge badge-soft-info py-2 px-3 font-medium">
-                                            {{$customer->orders->count()}}
+                                            {{ (int) ($customer->bookings_count ?? 0) }}
                                         </span>
                                     </a>
                                 </div>
                             </td>
                             <td>
                                 <div class="text-center">
-                                    {{ Helpers::set_symbol(\App\User::total_order_amount($customer->id)) }}
+                                    {{ Helpers::set_symbol($customer->bookings_amount ?? 0) }}
                                 </div>
                             </td>
                             <td>
@@ -128,7 +144,7 @@
                                     <input type="checkbox"
                                            class="toggle-switch-input status-change-alert" id="stocksCheckbox{{ $customer->id }}"
                                            data-route="{{ route('admin.customer.status', [$customer->id, $customer->is_block ? 0 : 1]) }}"
-                                           data-message="{{ $customer->is_block? translate('you_want_to_change_the_status_for_this_customer'): translate('you_want_to_change_the_status_for_this_customer') }}"
+                                           data-message="{{ translate('you_want_to_change_the_status_for_this_customer') }}"
                                         {{ $customer->is_block ? '' : 'checked' }}>
                                     <span class="toggle-switch-label mx-auto text">
                                         <span class="toggle-switch-indicator"></span>
@@ -137,9 +153,20 @@
                             </td>
                             <td>
                                 <div class="btn--container justify-content-center">
-                                    <a class="action-btn" href="{{route('admin.customer.view',[$customer['id']])}}">
+                                    <a class="action-btn" href="{{route('admin.customer.view',[$customer['id']])}}" title="{{ translate('View') }}">
                                         <i class="tio-invisible"></i>
                                     </a>
+                                    <a class="action-btn" href="javascript:" title="{{ translate('Reset password') }}"
+                                       data-toggle="modal" data-target="#resetPasswordModal"
+                                       data-customer-id="{{ $customer->id }}"
+                                       data-customer-name="{{ $customer->f_name }} {{ $customer->l_name }}">
+                                        <i class="tio-key"></i>
+                                    </a>
+                                    @if($customer->mentorProfile)
+                                        <a class="action-btn" href="{{ route('admin.mentor.edit', [$customer->mentorProfile->id]) }}" title="{{ translate('Edit mentor profile') }}">
+                                            <i class="tio-edit"></i>
+                                        </a>
+                                    @endif
                                     <a class="action-btn btn--danger btn-outline-danger form-alert" href="javascript:"
                                        data-id="customer-{{$customer['id']}}"
                                        data-message="{{translate('Want to remove this customer')}}?">
@@ -169,4 +196,52 @@
 
         </div>
     </div>
+
+    <div class="modal fade" id="resetPasswordModal" tabindex="-1" role="dialog" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <form method="post" id="resetPasswordForm" class="modal-content">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title" id="resetPasswordModalLabel">{{ translate('Reset password') }}</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3" id="resetPasswordCustomerName"></p>
+                    <div class="form-group">
+                        <label>{{ translate('New password') }}</label>
+                        <input type="password" name="password" class="form-control" minlength="8" required autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label>{{ translate('Confirm password') }}</label>
+                        <input type="password" name="password_confirmation" class="form-control" minlength="8" required autocomplete="new-password">
+                    </div>
+                    <div class="form-group mb-0">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="notifyCustomerPassword" name="notify_customer" value="1">
+                            <label class="custom-control-label" for="notifyCustomerPassword">{{ translate('Email new password to customer') }}</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ translate('Close') }}</button>
+                    <button type="submit" class="btn btn--primary">{{ translate('Update password') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
+
+@push('script_2')
+    <script>
+        $('#resetPasswordModal').on('show.bs.modal', function (event) {
+            const button = $(event.relatedTarget);
+            const customerId = button.data('customer-id');
+            const customerName = button.data('customer-name');
+            $('#resetPasswordCustomerName').text('{{ translate('Customer') }}: ' + customerName);
+            $('#resetPasswordForm').attr('action', @json(route('admin.customer.reset-password', ['id' => '__ID__'])).replace('__ID__', customerId));
+            $('#resetPasswordForm')[0].reset();
+        });
+    </script>
+@endpush

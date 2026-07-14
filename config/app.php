@@ -56,6 +56,8 @@ return [
 
     'asset_url' => env('ASSET_URL', null),
 
+    'mentorkhoj_site_url' => env('MENTORKHOJ_SITE_URL', 'https://www.mentorkhoj.com'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

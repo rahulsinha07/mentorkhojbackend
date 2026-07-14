@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Auth;
 
+use App\CentralLogics\AccountTypeLogic;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\OtpDelivery;
 use App\CentralLogics\SMS_module;
@@ -69,6 +70,7 @@ class CustomerAuthController extends Controller
             'temporary_token' => $temporaryToken,
             'referral_code' => Helpers::generate_referer_code(),
             'referred_by' => $refer_user->id ?? null,
+            'account_type' => AccountTypeLogic::accountTypeForRegistration($request->input('login_as')),
         ]);
 
         $phoneVerification = Helpers::get_business_settings('phone_verification');
@@ -245,10 +247,24 @@ class CustomerAuthController extends Controller
                 return response()->json(['errors' => $errors], 403);
             }
             $user = $this->user->where(['phone' => $request['phone']])->first();
+            if (!$user) {
+                return response()->json(['errors' => [[
+                    'code' => 'not-found',
+                    'message' => translate('Customer not found!'),
+                ]]], 404);
+            }
             $user->is_phone_verified = 1;
             $user->save();
 
             $verify->delete();
+
+            $portalError = AccountTypeLogic::validateLoginPortal($user, $request->input('login_as'));
+            if ($portalError) {
+                return $portalError;
+            }
+
+            AccountTypeLogic::recordLoginPortal($user, $request->input('login_as'));
+            $user->save();
 
             $token = $user->createToken('RestaurantCustomerAuth')->accessToken;
 
@@ -477,11 +493,19 @@ class CustomerAuthController extends Controller
                     return response()->json(['temporary_token' => $temporaryToken, 'status' => false], 200);
                 }
 
+                $portalError = AccountTypeLogic::validateLoginPortal($user, $request->input('login_as'));
+                if ($portalError) {
+                    auth()->logout();
+                    return $portalError;
+                }
+
                 $token = auth()->user()->createToken('RestaurantCustomerAuth')->accessToken;
 
+                $user = auth()->user();
                 $user->login_hit_count = 0;
                 $user->is_temp_blocked = 0;
                 $user->temp_block_time = null;
+                AccountTypeLogic::recordLoginPortal($user, $request->input('login_as'));
                 $user->updated_at = now();
                 $user->language_code = $request->header('X-localization');
                 $user->save();
@@ -654,15 +678,12 @@ class CustomerAuthController extends Controller
                 $user->login_medium = $request['medium'];
                 $user->referral_code = Helpers::generate_referer_code();
                 $user->email_verified_at = now();
+                $user->account_type = AccountTypeLogic::accountTypeForRegistration($request->input('login_as'));
                 $user->save();
                 $user->save();
             }
 
-            $token = $user->createToken('AuthToken')->accessToken;
-            return response()->json([
-                'errors' => null,
-                'token' => $token,
-            ], 200);
+            return $this->issueCustomerToken($user, $request);
         }
 
         if ($request['medium'] != 'apple' && strcmp($email, $data['email']) === 0) {
@@ -682,16 +703,13 @@ class CustomerAuthController extends Controller
                 $user->login_medium = $request['medium'];
                 $user->referral_code = Helpers::generate_referer_code();
                 $user->email_verified_at = now();
+                $user->account_type = AccountTypeLogic::accountTypeForRegistration($request->input('login_as'));
                 $user->save();
             } else {
                 $this->syncSocialProfile($user, $data, $request['medium']);
             }
 
-            $token = $user->createToken('AuthToken')->accessToken;
-            return response()->json([
-                'errors' => null,
-                'token' => $token,
-            ], 200);
+            return $this->issueCustomerToken($user, $request);
         }
 
         $errors = [];
@@ -891,5 +909,23 @@ class CustomerAuthController extends Controller
         if ($dirty) {
             $user->save();
         }
+    }
+
+    private function issueCustomerToken(User $user, Request $request, string $tokenName = 'AuthToken'): JsonResponse
+    {
+        $portalError = AccountTypeLogic::validateLoginPortal($user, $request->input('login_as'));
+        if ($portalError) {
+            return $portalError;
+        }
+
+        AccountTypeLogic::recordLoginPortal($user, $request->input('login_as'));
+        $user->save();
+
+        $token = $user->createToken($tokenName)->accessToken;
+
+        return response()->json([
+            'errors' => null,
+            'token' => $token,
+        ], 200);
     }
 }

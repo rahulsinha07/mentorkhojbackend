@@ -26,6 +26,8 @@ use App\Http\Controllers\Admin\LanguageController;
 use App\Http\Controllers\Admin\LocationSettingsController;
 use App\Http\Controllers\Admin\LoyaltyPointController;
 use App\Http\Controllers\Admin\MentorController;
+use App\Http\Controllers\Admin\SeminarController;
+use App\Http\Controllers\Admin\InternshipController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\OfferController;
 use App\Http\Controllers\Admin\OrderController;
@@ -193,9 +195,35 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
 
         Route::group(['prefix' => 'mentor', 'as' => 'mentor.','middleware'=>['module:product_management']], function () {
             Route::get('list', [MentorController::class, 'list'])->name('list');
+            Route::get('edit/{id}', [MentorController::class, 'edit'])->name('edit');
+            Route::post('update/{id}', [MentorController::class, 'update'])->name('update');
             Route::get('status/{id}/{status}', [MentorController::class, 'status'])->name('status');
             Route::get('publish/{id}/{is_published}', [MentorController::class, 'publish'])->name('publish');
             Route::delete('delete/{id}', [MentorController::class, 'delete'])->name('delete');
+        });
+
+        Route::group(['prefix' => 'seminar', 'as' => 'seminar.', 'middleware' => ['module:promotion_management']], function () {
+            Route::get('list', [SeminarController::class, 'list'])->name('list');
+            Route::get('add', [SeminarController::class, 'add'])->name('add');
+            Route::post('store', [SeminarController::class, 'store'])->name('store');
+            Route::get('edit/{id}', [SeminarController::class, 'edit'])->name('edit');
+            Route::post('update/{id}', [SeminarController::class, 'update'])->name('update');
+            Route::get('status/{id}/{status}', [SeminarController::class, 'status'])->name('status');
+            Route::get('publish/{id}/{is_published}', [SeminarController::class, 'publish'])->name('publish');
+            Route::delete('delete/{id}', [SeminarController::class, 'delete'])->name('delete');
+            Route::get('registrations', [SeminarController::class, 'registrations'])->name('registrations');
+        });
+
+        Route::group(['prefix' => 'internship', 'as' => 'internship.', 'middleware' => ['module:promotion_management']], function () {
+            Route::get('list', [InternshipController::class, 'list'])->name('list');
+            Route::get('add', [InternshipController::class, 'add'])->name('add');
+            Route::post('store', [InternshipController::class, 'store'])->name('store');
+            Route::get('edit/{id}', [InternshipController::class, 'edit'])->name('edit');
+            Route::post('update/{id}', [InternshipController::class, 'update'])->name('update');
+            Route::get('status/{id}/{status}', [InternshipController::class, 'status'])->name('status');
+            Route::get('publish/{id}/{is_published}', [InternshipController::class, 'publish'])->name('publish');
+            Route::delete('delete/{id}', [InternshipController::class, 'delete'])->name('delete');
+            Route::get('applications', [InternshipController::class, 'applications'])->name('applications');
         });
 
         Route::group(['prefix' => 'orders', 'as' => 'orders.','middleware'=>['module:order_management']], function () {
@@ -435,6 +463,7 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('subscribed-emails', [CustomerController::class, 'subscribedEmails'])->name('subscribed_emails');
             Route::delete('delete/{id}', [CustomerController::class, 'delete'])->name('delete');
             Route::get('status/{id}/{status}', [CustomerController::class, 'status'])->name('status');
+            Route::post('reset-password/{id}', [CustomerController::class, 'resetPassword'])->name('reset-password');
             Route::get('export', [CustomerController::class, 'exportCustomer'])->name('export');
 
             Route::get('select-list', [CustomerWalletController::class, 'getCustomers'])->name('select-list');
