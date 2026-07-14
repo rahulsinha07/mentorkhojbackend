@@ -24,7 +24,7 @@ class FormMailLogic
 
     public static function adminEmail(): string
     {
-        $fromEnv = trim((string) env('MENTORKHOJ_ADMIN_EMAIL', ''));
+        $fromEnv = trim((string) config('app.mentorkhoj_admin_email', ''));
         if ($fromEnv !== '') {
             return $fromEnv;
         }
@@ -34,7 +34,7 @@ class FormMailLogic
             return $mailConfig['email_id'];
         }
 
-        return 'mentorkhoj@gmail.com';
+        return 'admin@mentorkhoj.com';
     }
 
     /** @return array<string, string> */

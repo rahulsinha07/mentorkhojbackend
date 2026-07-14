@@ -58,6 +58,8 @@ return [
 
     'mentorkhoj_site_url' => env('MENTORKHOJ_SITE_URL', 'https://www.mentorkhoj.com'),
 
+    'mentorkhoj_admin_email' => env('MENTORKHOJ_ADMIN_EMAIL', 'admin@mentorkhoj.com'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

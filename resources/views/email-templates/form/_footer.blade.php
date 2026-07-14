@@ -5,7 +5,7 @@
                     <td style="background-color:#0f172a;border-radius:0 0 16px 16px;padding:24px 32px;text-align:center;border:1px solid #1e293b;border-top:none;">
                         <p style="margin:0 0 12px;font-size:13px;color:#94a3b8;line-height:1.6;">
                             Questions? Reply to this email or write to
-                            <a href="mailto:{{ $brand['admin_email'] ?? 'mentorkhoj@gmail.com' }}" style="color:#5eead4;text-decoration:none;">{{ $brand['admin_email'] ?? 'mentorkhoj@gmail.com' }}</a>
+                            <a href="mailto:{{ $brand['admin_email'] ?? 'admin@mentorkhoj.com' }}" style="color:#5eead4;text-decoration:none;">{{ $brand['admin_email'] ?? 'admin@mentorkhoj.com' }}</a>
                         </p>
                         <p style="margin:0 0 16px;">
                             <a href="{{ $brand['site_url'] ?? 'https://www.mentorkhoj.com' }}" style="color:#94a3b8;text-decoration:none;font-size:12px;margin:0 8px;">Home</a>

@@ -30,8 +30,10 @@ class ConfigServiceProvider extends ServiceProvider
         $mode = env('APP_MODE');
 
         try {
+            $envMailConfigured = !empty(env('MAIL_HOST')) && !empty(env('MAIL_USERNAME'));
             $emailServices = Helpers::get_business_settings('mail_config');
-            if ($emailServices && ($emailServices['status'] ?? 0) == 1) {
+            // Prefer .env SMTP when set (seminar/internship mail); fall back to admin Mail Config
+            if (!$envMailConfigured && $emailServices && ($emailServices['status'] ?? 0) == 1) {
                 $config = array(
                     'driver' => $emailServices['driver'],
                     'host' => $emailServices['host'],
