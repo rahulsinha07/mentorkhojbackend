@@ -5048,8 +5048,8 @@ aside .navbar-nav > .nav-item.mt-0 {
 
 body:not(.navbar-vertical-aside-closed-mode) .navbar-vertical-aside-mobile-overlay,
 body:not(.navbar-vertical-aside-closed-mode) .navbar-vertical-aside-sub-menu-overlay {
-  min-width: 200vw !important;
-  min-height: 200vh !important;
+  width: 100%;
+  height: 100%;
 }
 
 #location_map_div {

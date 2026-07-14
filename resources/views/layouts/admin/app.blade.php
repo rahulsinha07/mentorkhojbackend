@@ -3,7 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, shrink-to-fit=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>@yield('title')</title>
     @php($icon = \App\Model\BusinessSetting::where(['key' => 'fav_icon'])->first()->value)
     <link rel="icon" type="image/x-icon" href="{{ asset('storage/app/public/restaurant/' . $icon ?? '') }}">
@@ -20,6 +22,7 @@
         src="{{asset('public/assets/admin')}}/vendor/hs-navbar-vertical-aside/hs-navbar-vertical-aside-mini-cache.js"></script>
     <link rel="stylesheet" href="{{asset('public/assets/admin')}}/css/toastr.css">
     <link rel="stylesheet" href="{{asset('public/assets/admin')}}/css/custom-helper.css">
+    <link rel="stylesheet" href="{{asset('public/assets/admin')}}/css/mobile-admin.css?v=1.0">
 </head>
 
 <body class="footer-offset">
@@ -123,6 +126,39 @@
             locale: {
                 format: 'M/DD hh:mm A'
             }
+        });
+
+        // Mobile: close sidebar after choosing a menu item
+        function isMobileAdminNav() {
+            return window.innerWidth < 1200;
+        }
+
+        $('.js-navbar-vertical-aside .nav-link[href]').on('click', function () {
+            if (!isMobileAdminNav() || $(this).hasClass('nav-link-toggle')) {
+                return;
+            }
+            setTimeout(function () {
+                if (!$('body').hasClass('navbar-vertical-aside-closed-mode')) {
+                    $('.navbar-brand-wrapper .js-navbar-vertical-aside-toggle-invoker').trigger('click');
+                }
+            }, 150);
+        });
+
+        // Mobile: close sidebar when tapping overlay
+        $(document).on('click', '.navbar-vertical-aside-mobile-overlay', function () {
+            if (isMobileAdminNav() && !$('body').hasClass('navbar-vertical-aside-closed-mode')) {
+                $('.navbar-brand-wrapper .js-navbar-vertical-aside-toggle-invoker').trigger('click');
+            }
+        });
+
+        // Close drawer when crossing down to mobile width
+        var wasMobileAdminNav = isMobileAdminNav();
+        $(window).on('resize', function () {
+            var mobileNow = isMobileAdminNav();
+            if (mobileNow && !wasMobileAdminNav && !$('body').hasClass('navbar-vertical-aside-closed-mode')) {
+                $('.navbar-brand-wrapper .js-navbar-vertical-aside-toggle-invoker').trigger('click');
+            }
+            wasMobileAdminNav = mobileNow;
         });
     });
 </script>

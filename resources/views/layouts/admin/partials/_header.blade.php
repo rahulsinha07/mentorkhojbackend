@@ -3,12 +3,10 @@
             class="navbar navbar-expand-lg navbar-fixed navbar-height navbar-flush navbar-container navbar-bordered">
         <div class="navbar-nav-wrap">
             <div class="navbar-nav-wrap-content-left d-xl-none">
-                <button type="button" class="js-navbar-vertical-aside-toggle-invoker close mr-3">
-                    <i class="tio-first-page navbar-vertical-aside-toggle-short-align" data-toggle="tooltip"
-                       data-placement="right" title="Collapse"></i>
-                    <i class="tio-last-page navbar-vertical-aside-toggle-full-align"
-                       data-template='<div class="tooltip d-none d-sm-block" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>'
-                       data-toggle="tooltip" data-placement="right" title="Expand"></i>
+                <button type="button"
+                        class="js-navbar-vertical-aside-toggle-invoker admin-mobile-menu-toggle mr-2"
+                        aria-label="Menu">
+                    <i class="tio-menu-hamburger"></i>
                 </button>
             </div>
 
@@ -46,7 +44,7 @@
                         </div>
                     </li>
 
-                    <li class="nav-item d-none d-sm-inline-block">
+                    <li class="nav-item d-inline-block">
                         <div class="hs-unfold">
                             <a class="js-hs-unfold-invoker btn btn-icon notify--icon"
                                href="{{route('admin.message.list')}}">

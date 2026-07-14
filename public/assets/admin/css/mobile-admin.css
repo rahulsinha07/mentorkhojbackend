@@ -1,0 +1,276 @@
+/**
+ * Admin panel mobile enhancements
+ */
+
+/* Prevent horizontal page scroll on small screens */
+html,
+body {
+  overflow-x: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Sidebar drawer (below 1200px)                                      */
+/* ------------------------------------------------------------------ */
+@media (max-width: 1199.98px) {
+  .navbar-vertical-fixed.navbar-vertical-aside {
+    width: min(16.25rem, 88vw);
+    max-width: 88vw;
+  }
+
+  .navbar-vertical-aside-mobile-overlay {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+  }
+
+  body:not(.navbar-vertical-aside-closed-mode).navbar-vertical-aside-transition-on {
+    overflow: hidden;
+  }
+
+  .navbar-vertical-aside .navbar-vertical-content {
+    max-height: calc(100vh - 4.5rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .navbar-vertical-aside .nav-link,
+  .navbar-vertical-aside .navbar-brand-wrapper .btn {
+    min-height: 44px;
+  }
+
+  .navbar-vertical-aside .sidebar--search-form {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: inherit;
+    padding-bottom: 0.5rem;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Header                                                             */
+/* ------------------------------------------------------------------ */
+@media (max-width: 1199.98px) {
+  .navbar-fixed.navbar-container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .admin-mobile-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #334257;
+    border-radius: 0.5rem;
+  }
+
+  .admin-mobile-menu-toggle:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(1, 104, 75, 0.25);
+  }
+
+  .admin-mobile-menu-toggle .tio-menu-hamburger {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+}
+
+@media (max-width: 575.98px) {
+  .navbar-nav-wrap-content-right .navbar-nav {
+    gap: 0.25rem;
+  }
+
+  .navbar-nav-wrap-content-right .nav-item.ml-4 {
+    margin-left: 0.25rem !important;
+  }
+
+  .navbar-nav-wrap-content-right .btn-icon.notify--icon {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+  }
+
+  .navbar-nav-wrap-content-right .cmn--media .media-body {
+    display: none !important;
+  }
+
+  .navbar-nav-wrap-content-right .lang-country-flag span {
+    display: none;
+  }
+
+  .navbar-nav-wrap-content-right .topbar-link.dropdown-toggle {
+    padding: 0.35rem;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Main content                                                       */
+/* ------------------------------------------------------------------ */
+@media (max-width: 767.98px) {
+  .main {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .content.container-fluid {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .page-header {
+    margin-bottom: 1rem;
+  }
+
+  .page-header-title {
+    font-size: 1.15rem;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+
+  .page-header-icon img,
+  .page-header-icon i {
+    flex-shrink: 0;
+  }
+
+  .card-header,
+  .card-body {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .btn--container {
+    flex-wrap: wrap;
+    justify-content: flex-start !important;
+    gap: 0.5rem;
+  }
+
+  .btn--container > * {
+    margin: 0 !important;
+  }
+
+  .table .btn--container {
+    flex-wrap: wrap;
+  }
+
+  .search--button-wrapper,
+  .__btn-row {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .search--button-wrapper .form-group,
+  .search--button-wrapper .btn,
+  .__btn-row .btn {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .table-responsive {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .min--200,
+  .min--250 {
+    min-width: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Tabs & filters (Third Party settings, etc.)                        */
+/* ------------------------------------------------------------------ */
+@media (max-width: 991.98px) {
+  .nav-tabs.border-0.mb-3,
+  .page-header .nav-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    white-space: nowrap;
+    padding-bottom: 0.25rem;
+    margin-bottom: 1rem !important;
+  }
+
+  .nav-tabs.border-0.mb-3::-webkit-scrollbar,
+  .page-header .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tabs .nav-item {
+    flex: 0 0 auto;
+  }
+
+  .nav-tabs .nav-link {
+    font-size: 0.875rem;
+    padding: 0.5rem 0.85rem;
+    white-space: nowrap;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Forms, toggles, modals                                             */
+/* ------------------------------------------------------------------ */
+@media (max-width: 767.98px) {
+  .form-control,
+  .custom-select,
+  .select2-container {
+    max-width: 100%;
+  }
+
+  .toggle-switch.h--45px {
+    min-height: auto;
+    height: auto !important;
+    padding-top: 0.65rem !important;
+    padding-bottom: 0.65rem !important;
+  }
+
+  .modal-dialog {
+    margin: 0.75rem;
+    max-width: calc(100% - 1.5rem);
+  }
+
+  .modal-dialog.modal-lg,
+  .modal-dialog.modal-xl {
+    max-width: calc(100% - 1.5rem);
+  }
+
+  .dropdown-menu {
+    max-width: calc(100vw - 2rem);
+  }
+
+  .row.g-3 > [class*="col-"],
+  .row.gx-2 > [class*="col-"],
+  .row.gx-3 > [class*="col-"] {
+    margin-bottom: 0.75rem;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Social login cards & dashboard widgets                             */
+/* ------------------------------------------------------------------ */
+@media (max-width: 575.98px) {
+  .__social-media-login {
+    margin-bottom: 0.5rem;
+  }
+
+  .store-report-content > * {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  footer.footer {
+    text-align: center;
+  }
+
+  footer.footer .row {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
