@@ -45,9 +45,23 @@ class SeminarPublicController extends Controller
 
     public function register(Request $request, string $slug): JsonResponse
     {
+        if (!$request->user()) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Login required to book this seminar.',
+            ], 401);
+        }
+
         $seminar = SeminarLogic::resolveBySlug($slug);
         if (!$seminar || !$seminar->is_published || $seminar->status === 'draft') {
             return response()->json(['errors' => [['code' => 'not_found', 'message' => 'Seminar not found']]], 404);
+        }
+
+        if ((float) ($seminar->fee_amount ?? 0) > 0) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'This is a paid seminar. Please book via the website to complete payment.',
+            ], 403);
         }
 
         if ($seminar->status === 'paused') {

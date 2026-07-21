@@ -69,6 +69,8 @@ class SeminarController extends Controller
             'emoji' => 'nullable|max:16',
             'highlights' => 'nullable|string',
             'sort_order' => 'nullable|integer|min:0',
+            'fee_amount' => 'nullable|numeric|min:0|max:999999.99',
+            'currency' => 'nullable|string|size:3',
         ]);
 
         $seminar = new Seminar();
@@ -87,6 +89,8 @@ class SeminarController extends Controller
         $seminar->status = $request->status ?: 'active';
         $seminar->is_published = (bool) $request->is_published;
         $seminar->sort_order = (int) ($request->sort_order ?? 0);
+        $seminar->fee_amount = (float) ($request->fee_amount ?? 0);
+        $seminar->currency = strtoupper($request->currency ?? 'INR');
         $seminar->save();
 
         MentorKhojRevalidateLogic::revalidateSeminar($seminar->slug);
@@ -111,6 +115,8 @@ class SeminarController extends Controller
             'emoji' => 'nullable|max:16',
             'highlights' => 'nullable|string',
             'sort_order' => 'nullable|integer|min:0',
+            'fee_amount' => 'nullable|numeric|min:0|max:999999.99',
+            'currency' => 'nullable|string|size:3',
         ]);
 
         $seminar->title = $request->title;
@@ -128,6 +134,8 @@ class SeminarController extends Controller
         $seminar->status = $request->status ?: 'active';
         $seminar->is_published = (bool) $request->is_published;
         $seminar->sort_order = (int) ($request->sort_order ?? 0);
+        $seminar->fee_amount = (float) ($request->fee_amount ?? 0);
+        $seminar->currency = strtoupper($request->currency ?? 'INR');
         $seminar->save();
 
         MentorKhojRevalidateLogic::revalidateSeminar($seminar->slug);

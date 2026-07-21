@@ -52,6 +52,9 @@ class SeminarLogic
             'highlights' => $seminar->highlights ?? [],
             'status' => $seminar->status,
             'accepting_registrations' => $seminar->status === 'active' && $seminar->is_published,
+            'fee_amount' => (float) ($seminar->fee_amount ?? 0),
+            'currency' => $seminar->currency ?? 'INR',
+            'is_free' => ((float) ($seminar->fee_amount ?? 0)) <= 0,
         ];
     }
 

@@ -17,6 +17,9 @@ class MentorBooking extends Model
         'tax_amount' => 'float',
         'platform_fee' => 'float',
         'mentor_net' => 'float',
+        'mentee_booked_email_sent_at' => 'datetime',
+        'mentor_notify_email_sent_at' => 'datetime',
+        'mentee_confirmed_email_sent_at' => 'datetime',
     ];
 
     protected $fillable = [
@@ -33,6 +36,9 @@ class MentorBooking extends Model
         'platform_fee',
         'mentor_net',
         'payment_status',
+        'mentee_booked_email_sent_at',
+        'mentor_notify_email_sent_at',
+        'mentee_confirmed_email_sent_at',
     ];
 
     public function mentor(): BelongsTo

@@ -624,6 +624,12 @@ class OrderController extends Controller
             $this->order->where(['user_id' => $userId, 'is_guest' => $userType, 'id' => $request['order_id']])->update([
                 'order_status' => 'canceled',
             ]);
+
+            $canceledOrder = $this->order->find($request['order_id']);
+            if ($canceledOrder) {
+                \App\CentralLogics\MentorBookingLogic::syncBookingsForOrder($canceledOrder);
+            }
+
             return response()->json(['message' => 'Order canceled'], 200);
         }
         return response()->json([

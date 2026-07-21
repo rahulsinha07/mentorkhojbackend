@@ -13,6 +13,7 @@ class Seminar extends Model
         'highlights' => 'array',
         'is_published' => 'boolean',
         'sort_order' => 'integer',
+        'fee_amount' => 'decimal:2',
     ];
 
     protected $fillable = [
@@ -29,7 +30,14 @@ class Seminar extends Model
         'status',
         'is_published',
         'sort_order',
+        'fee_amount',
+        'currency',
     ];
+
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(SeminarBooking::class)->latest();
+    }
 
     public function registrations(): HasMany
     {

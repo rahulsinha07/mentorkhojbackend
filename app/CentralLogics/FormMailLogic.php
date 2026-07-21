@@ -72,6 +72,12 @@ class FormMailLogic
     }
 
     /** @param array<string, mixed> $data */
+    public static function withBrandPublic(array $data): array
+    {
+        return self::withBrand($data);
+    }
+
+    /** @param array<string, mixed> $data */
     private static function withBrand(array $data): array
     {
         return array_merge($data, ['brand' => self::brandContext()]);
@@ -122,6 +128,29 @@ class FormMailLogic
         }
 
         return $userSent;
+    }
+
+    public static function sendPasswordResetEmail(
+        string $toEmail,
+        string $name,
+        string $token,
+        string $resetLink,
+    ): bool {
+        if (!self::isMailEnabled()) {
+            Log::warning('Password reset mail skipped: SMTP not configured (set MAIL_* in .env or enable admin Mail Config)');
+
+            return false;
+        }
+
+        try {
+            Mail::to($toEmail)->send(new \App\Mail\Customer\PasswordReset($token, $name, $resetLink));
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Password reset email failed: ' . $e->getMessage(), ['email' => $toEmail]);
+
+            return false;
+        }
     }
 
     public static function sendInternshipApplicationEmails(

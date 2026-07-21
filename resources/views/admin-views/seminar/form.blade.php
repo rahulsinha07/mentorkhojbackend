@@ -84,6 +84,9 @@
                             </div>
                         </div>
                         <div class="col-12">
+                            @include('admin-views.seminar.fee-fields', ['seminar' => $seminar])
+                        </div>
+                        <div class="col-12">
                             <div class="btn--container justify-content-end">
                                 <a href="{{ route('admin.seminar.list') }}" class="btn btn--reset">Cancel</a>
                                 <button type="submit" class="btn btn--primary">{{ $seminar ? 'Update' : 'Save' }}</button>

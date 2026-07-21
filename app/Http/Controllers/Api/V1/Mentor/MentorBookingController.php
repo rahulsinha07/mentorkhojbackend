@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Mentor;
 
 use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorBookingLogic;
+use App\CentralLogics\MentorBookingMailLogic;
 use App\CentralLogics\MentorLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Branch;
@@ -45,6 +46,28 @@ class MentorBookingController extends Controller
         }
 
         $menteeId = $request->user()?->id;
+
+        if ($menteeId) {
+            $existing = MentorBookingLogic::findRetryableBooking($menteeId, $mentor->id, $service->id);
+            if ($existing) {
+                if ($existing->payment_status === 'failed') {
+                    $existing = MentorBookingLogic::prepareForPaymentRetry($existing);
+                }
+
+                $existing->update([
+                    'preferred_date' => $request->preferred_date ?? $existing->preferred_date,
+                    'preferred_time' => $request->preferred_time ?? $existing->preferred_time,
+                    'mentee_note' => $request->mentee_note ?? $existing->mentee_note,
+                ]);
+
+                return response()->json([
+                    'message' => $existing->payment_status === 'pending'
+                        ? 'Existing booking resumed. Complete payment to confirm.'
+                        : 'Booking request created',
+                    'booking' => MentorBookingLogic::formatBooking($existing->fresh()),
+                ], 200);
+            }
+        }
 
         $booking = MentorBookingLogic::createBooking($mentor, $service, $menteeId, $request->all());
 
@@ -105,8 +128,13 @@ class MentorBookingController extends Controller
             return response()->json(['errors' => Helpers::error_processor($validator)], 403);
         }
 
+        $previousStatus = $booking->status;
         $booking->status = $request->status;
         $booking->save();
+
+        if ($previousStatus !== 'confirmed' && $booking->status === 'confirmed') {
+            MentorBookingMailLogic::sendMenteeConfirmedEmail($booking);
+        }
 
         return response()->json([
             'message' => 'Booking updated',
@@ -119,6 +147,25 @@ class MentorBookingController extends Controller
         $booking = MentorBooking::with(['service', 'mentor'])->find($id);
         if (!$booking || (int) $booking->mentee_user_id !== (int) $request->user()->id) {
             return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        if ($booking->payment_status === 'paid') {
+            return response()->json([
+                'errors' => [['message' => 'This booking is already paid.']],
+                'booking' => MentorBookingLogic::formatBooking($booking),
+            ], 400);
+        }
+
+        if ($booking->payment_status === 'failed') {
+            try {
+                $booking = MentorBookingLogic::prepareForPaymentRetry($booking);
+            } catch (\InvalidArgumentException $e) {
+                return response()->json(['errors' => [['message' => $e->getMessage()]]], 400);
+            }
+        }
+
+        if ($booking->payment_status !== 'pending') {
+            return response()->json(['errors' => [['message' => 'Payment is not available for this booking.']]], 400);
         }
 
         $mentor = $booking->mentor;
@@ -142,5 +189,31 @@ class MentorBookingController extends Controller
             'branch_id' => $branch?->id,
             'wallet_balance' => (float) ($request->user()->wallet_balance ?? 0),
         ]);
+    }
+
+    public function reportPaymentFailure(Request $request, int $id): JsonResponse
+    {
+        $booking = MentorBooking::with(['service', 'mentor'])->find($id);
+        if (!$booking || (int) $booking->mentee_user_id !== (int) $request->user()->id) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        if ($booking->payment_status === 'paid') {
+            return response()->json(['errors' => [['message' => 'This booking is already paid.']]], 400);
+        }
+
+        $validated = $request->validate([
+            'reason' => 'nullable|string|max:500',
+        ]);
+
+        $booking = MentorBookingLogic::markPaymentFailed(
+            $booking,
+            $validated['reason'] ?? 'Payment was not completed.',
+        );
+
+        return response()->json([
+            'message' => 'Payment was not completed. Your session is not confirmed yet. You can try again.',
+            'booking' => MentorBookingLogic::formatBooking($booking),
+        ], 200);
     }
 }

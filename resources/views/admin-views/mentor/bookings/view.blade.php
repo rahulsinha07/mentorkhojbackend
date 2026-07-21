@@ -44,7 +44,7 @@
                             <dt>{{ translate('Mentor net') }}</dt>
                             <dd>{{ Helpers::set_symbol($booking->mentor_net) }}</dd>
                             <dt>{{ translate('Payment status') }}</dt>
-                            <dd><span class="badge badge-soft-{{ $booking->payment_status === 'paid' ? 'success' : 'warning' }}">{{ $booking->payment_status }}</span></dd>
+                            <dd><span class="badge badge-soft-{{ $booking->payment_status === 'paid' ? 'success' : ($booking->payment_status === 'failed' ? 'danger' : 'warning') }}">{{ $booking->payment_status }}</span></dd>
                             <dt>{{ translate('Booking status') }}</dt>
                             <dd><span class="badge badge-soft-info">{{ $booking->status }}</span></dd>
                             @if($booking->legacy_order_id)

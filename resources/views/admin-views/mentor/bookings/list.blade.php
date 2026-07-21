@@ -62,7 +62,7 @@
                                 {{ Helpers::set_symbol($booking->amount + $booking->tax_amount) }}
                             </td>
                             <td class="text-center">
-                                <span class="badge badge-soft-{{ $booking->payment_status === 'paid' ? 'success' : 'warning' }}">
+                                <span class="badge badge-soft-{{ $booking->payment_status === 'paid' ? 'success' : ($booking->payment_status === 'failed' ? 'danger' : 'warning') }}">
                                     {{ $booking->payment_status }}
                                 </span>
                             </td>

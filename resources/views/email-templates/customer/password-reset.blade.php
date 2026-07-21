@@ -1,141 +1,83 @@
 <!DOCTYPE html>
 <html>
-
 <head>
     <meta charset="utf-8">
     <meta http-equiv="x-ua-compatible" content="ie=edge">
-    <title>{{ translate('Customer Password Reset') }}</title>
+    <title>Reset your MentorKhoj password</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style type="text/css">
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
         body {
-            font-family: 'Roboto', sans-serif;
-            width: 100% !important;
-            height: 100% !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            color: #334257;
-            font-size: 13px;
-            line-height: 1.5;
-            display: flex;align-items: center;justify-content: center;
-            min-height: 100vh;
-
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background-color: #f1f5f9;
+            margin: 0;
+            padding: 24px 16px;
+            color: #0f172a;
         }
-
-        table {
-            border-collapse: collapse !important;
+        .card {
+            max-width: 520px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 32px 28px;
+            box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
         }
-        .border-top {
-            border-top: 1px solid rgba(0, 170, 109, 0.3);
-            padding: 15px 0 10px;
-            display: block;
+        h1 {
+            font-size: 22px;
+            margin: 0 0 8px;
         }
-        .d-block {
-            display: block;
+        p {
+            line-height: 1.6;
+            margin: 0 0 16px;
+            color: #334155;
         }
-        .privacy {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-
-        }
-        .privacy a {
-            text-decoration: none;
-            color: #334257;
-            position: relative;
-        }
-        .privacy a:not(:last-child)::after {
-            content:'';
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #334257;
+        .btn {
             display: inline-block;
-            margin: 0 15px
+            background: #2563eb;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-weight: 600;
+            margin: 8px 0 20px;
         }
-        .social {
-            margin: 15px 0 8px;
-            display: block;
+        .muted {
+            font-size: 13px;
+            color: #64748b;
         }
-        .copyright{
-            text-align: center;
-            display: block;
+        .fallback {
+            word-break: break-all;
+            font-size: 12px;
+            color: #475569;
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 8px;
         }
-        .text-base {
-            color: var(--base);
-font-weight: 700
-        }
-
     </style>
 </head>
+<body>
+@php($business_name = \App\Model\BusinessSetting::where(['key' => 'restaurant_name'])->first()->value ?? 'MentorKhoj')
+@php($expiry = $expiryMinutes ?? 30)
 
-<body style="background-color: #e9ecef;padding:15px">
+<div class="card">
+    <h1>Reset your password</h1>
+    <p>Hi {{ $name }},</p>
+    <p>We received a request to reset your {{ $business_name }} account password. Click the button below to choose a new password.</p>
 
-@php($logo=\App\Model\BusinessSetting::where(['key'=>'logo'])->first()->value)
-@php($business_name=\App\Model\BusinessSetting::where(['key'=>'restaurant_name'])->first()->value)
-@php($footer=\App\Model\BusinessSetting::where(['key'=>'footer_text'])->first()->value)
-<?php
-$socialMediaList = \App\Model\SocialMedia::active()->get();
-$platforms = ['facebook', 'pinterest', 'linkedin', 'instagram', 'twitter'];
-$socialMediaLinks = [];
+    @if(!empty($link))
+        <p style="text-align:center;">
+            <a href="{{ $link }}" class="btn">Reset password</a>
+        </p>
+        <p class="muted">This link expires in {{ $expiry }} minutes and can only be used once.</p>
+        <p class="muted">If the button does not work, copy and paste this URL into your browser:</p>
+        <p class="fallback">{{ $link }}</p>
+    @else
+        <p>Your verification code is:</p>
+        <p style="font-size: 28px; letter-spacing: 4px; font-weight: 700; text-align: center;">{{ $token }}</p>
+        <p class="muted">This code expires in {{ $expiry }} minutes.</p>
+    @endif
 
-foreach ($socialMediaList as $social) {
-    $social_name = $social['name'];
-    $link = $social['link'];
-
-    if (in_array($social_name, $platforms)) {
-        $socialMediaLinks[$social_name] = $link;
-    }
-}
-?>
-
-    <table style="width:100%;max-width:500px;margin:0 auto;text-align:center;background:#fff">
-        <tr>
-            <td style="padding:30px 30px 0">
-                <img src="{{asset('/public/assets/admin/img/email-templates/forgot-password.png')}}" alt="forgot/png">
-                <h3 style="font-size:17px;font-weight:500">{{ translate('Change password request') }}</h3>
-            </td>
-        </tr>
-        <tr>
-            <td style="padding:0 30px 30px; text-align:left">
-                <span style="font-weight:500;display:block;margin: 20px 0 11px;">{{ translate('Hi ') }} {{ $name }},</span>
-                <span style="display:block;margin-bottom:14px">{{ translate('Your Verification Code is') }}</span>
-                <h2 style="font-size: 26px;margin: 0;letter-spacing:4px;text-align:center">{{$code ?? '123456'}}</h2>
-                <br>
-                <span class="border-top"></span>
-                <span class="d-block" style="margin-bottom:14px">{{ translate('Please contact us for any queries, we’re always happy to help.') }}</span>
-                <span class="d-block">{{ translate('Thanks & Regards') }},</span>
-                <span class="d-block" style="margin-bottom:20px"> {{$business_name}}</span>
-
-                <img style="width:120px;display:block;margin:10px auto" onerror="this.src='{{asset('/public/assets/admin/img//logo/main-logo.png')}}'"
-                     src="{{ asset('storage/app/public/restaurant/' . $logo) }}" alt="public/img">
-                <span class="privacy">
-                    <a href="{{ route('pages.privacy-policy') }}">{{translate('Privacy Policy')}}</a><a href="{{ route('pages.about-us') }}">{{ translate('About Us') }}</a>
-                </span>
-                <span class="social" style="text-align:center">
-                    <a href="{{ $socialMediaLinks['pinterest'] ?? '#' }}" style="margin: 0 5px;text-decoration:none">
-                        <img src="{{asset('/public/assets/admin/img/img/pinterest.png')}}" alt="pinterest">
-                    </a>
-                    <a href="{{ $socialMediaLinks['instagram'] ?? '#' }}" style="margin: 0 5px;text-decoration:none">
-                        <img src="{{asset('/public/assets/admin/img/img/instagram.png')}}" alt="instagram">
-                    </a>
-                    <a href="{{ $socialMediaLinks['facebook'] ?? '#' }}" style="margin: 0 5px;text-decoration:none">
-                        <img src="{{asset('/public/assets/admin/img/img/facebook.png')}}" alt="facebook">
-                    </a>
-                    <a href="{{ $socialMediaLinks['linkedin'] ?? '#' }}" style="margin: 0 5px;text-decoration:none">
-                        <img src="{{asset('/public/assets/admin/img/img/linkedin.png')}}" alt="linkedin">
-                    </a>
-                    <a href="{{ $socialMediaLinks['twitter'] ?? '#' }}" style="margin: 0 5px;text-decoration:none">
-                        <img src="{{asset('/public/assets/admin/img/img/twitter.png')}}" alt="twitter">
-                    </a>
-                </span>
-                <span class="copyright">
-                    {{ $footer }}
-                </span>
-            </td>
-        </tr>
-    </table>
-
+    <p class="muted">If you did not request a password reset, you can safely ignore this email.</p>
+    <p class="muted">— {{ $business_name }} Team</p>
+</div>
 </body>
-
 </html>

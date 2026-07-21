@@ -28,6 +28,7 @@ use App\Http\Controllers\Admin\LoyaltyPointController;
 use App\Http\Controllers\Admin\MentorController;
 use App\Http\Controllers\Admin\MentorBookingController;
 use App\Http\Controllers\Admin\SeminarController;
+use App\Http\Controllers\Admin\SeminarBookingAdminController;
 use App\Http\Controllers\Admin\InternshipController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\OfferController;
@@ -215,6 +216,7 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('publish/{id}/{is_published}', [SeminarController::class, 'publish'])->name('publish');
             Route::delete('delete/{id}', [SeminarController::class, 'delete'])->name('delete');
             Route::get('registrations', [SeminarController::class, 'registrations'])->name('registrations');
+            Route::get('bookings/{id}', [SeminarBookingAdminController::class, 'index'])->name('bookings');
         });
 
         Route::group(['prefix' => 'internship', 'as' => 'internship.', 'middleware' => ['module:promotion_management']], function () {
