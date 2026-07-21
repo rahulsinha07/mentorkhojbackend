@@ -7,14 +7,82 @@ use App\Http\Controllers\Controller;
 use App\Model\Seminar\Seminar;
 use App\Model\Seminar\SeminarBooking;
 use App\Services\RazorpaySeminarService;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class SeminarBookingController extends Controller
 {
     public function __construct(private RazorpaySeminarService $razorpay) {}
 
     public function book(Request $request, string $slug): JsonResponse
+    {
+        try {
+            return $this->processBook($request, $slug);
+        } catch (QueryException $e) {
+            return $this->jsonDbError($e);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 400);
+        }
+    }
+
+    public function createPaymentOrder(Request $request, int $id): JsonResponse
+    {
+        try {
+            return $this->processCreatePaymentOrder($request, $id);
+        } catch (QueryException $e) {
+            return $this->jsonDbError($e);
+        } catch (\RuntimeException $e) {
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 400);
+        }
+    }
+
+    public function verifyPayment(Request $request, int $id): JsonResponse
+    {
+        try {
+            return $this->processVerifyPayment($request, $id);
+        } catch (QueryException $e) {
+            return $this->jsonDbError($e);
+        } catch (\RuntimeException $e) {
+            $booking = SeminarBooking::find($id);
+            if ($booking) {
+                $booking = $this->razorpay->markPaymentFailed($booking, $e->getMessage());
+
+                return response()->json([
+                    'ok' => false,
+                    'message' => $e->getMessage(),
+                    'booking_id' => $booking->id,
+                    'booking_ref' => $booking->booking_ref,
+                    'payment_status' => $booking->payment_status,
+                    'status' => $booking->status,
+                    'can_retry_payment' => true,
+                ], 400);
+            }
+
+            return response()->json(['ok' => false, 'message' => $e->getMessage()], 400);
+        }
+    }
+
+    public function reportPaymentFailure(Request $request, int $id): JsonResponse
+    {
+        try {
+            return $this->processReportPaymentFailure($request, $id);
+        } catch (QueryException $e) {
+            return $this->jsonDbError($e);
+        }
+    }
+
+    public function myBookings(Request $request): JsonResponse
+    {
+        try {
+            return $this->processMyBookings($request);
+        } catch (QueryException $e) {
+            return $this->jsonDbError($e);
+        }
+    }
+
+    private function processBook(Request $request, string $slug): JsonResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -100,7 +168,7 @@ class SeminarBookingController extends Controller
         return response()->json($this->bookingResponse($booking->fresh(), $seminar));
     }
 
-    public function createPaymentOrder(Request $request, int $id): JsonResponse
+    private function processCreatePaymentOrder(Request $request, int $id): JsonResponse
     {
         $booking = SeminarBooking::with('seminar')->findOrFail($id);
 
@@ -116,12 +184,7 @@ class SeminarBookingController extends Controller
             return response()->json(['ok' => false, 'message' => 'Payment not required.'], 400);
         }
 
-        try {
-            $booking = $this->razorpay->prepareForPaymentRetry($booking);
-        } catch (\RuntimeException $e) {
-            return response()->json(['ok' => false, 'message' => $e->getMessage()], 400);
-        }
-
+        $booking = $this->razorpay->prepareForPaymentRetry($booking);
         $order = $this->razorpay->createOrder($booking);
 
         return response()->json([
@@ -139,7 +202,7 @@ class SeminarBookingController extends Controller
         ]);
     }
 
-    public function verifyPayment(Request $request, int $id): JsonResponse
+    private function processVerifyPayment(Request $request, int $id): JsonResponse
     {
         $booking = SeminarBooking::with('seminar')->findOrFail($id);
 
@@ -155,32 +218,18 @@ class SeminarBookingController extends Controller
             'transaction_reference' => 'required_without:razorpay_order_id|nullable|string',
         ]);
 
-        try {
-            if (!empty($validated['transaction_reference'])) {
-                $booking = $this->razorpay->markPaidFromTransactionReference(
-                    $booking,
-                    $validated['transaction_reference'],
-                );
-            } else {
-                $booking = $this->razorpay->markPaid(
-                    $booking,
-                    $validated['razorpay_order_id'],
-                    $validated['razorpay_payment_id'],
-                    $validated['razorpay_signature'],
-                );
-            }
-        } catch (\RuntimeException $e) {
-            $booking = $this->razorpay->markPaymentFailed($booking, $e->getMessage());
-
-            return response()->json([
-                'ok' => false,
-                'message' => $e->getMessage(),
-                'booking_id' => $booking->id,
-                'booking_ref' => $booking->booking_ref,
-                'payment_status' => $booking->payment_status,
-                'status' => $booking->status,
-                'can_retry_payment' => true,
-            ], 400);
+        if (!empty($validated['transaction_reference'])) {
+            $booking = $this->razorpay->markPaidFromTransactionReference(
+                $booking,
+                $validated['transaction_reference'],
+            );
+        } else {
+            $booking = $this->razorpay->markPaid(
+                $booking,
+                $validated['razorpay_order_id'],
+                $validated['razorpay_payment_id'],
+                $validated['razorpay_signature'],
+            );
         }
 
         return response()->json([
@@ -194,7 +243,7 @@ class SeminarBookingController extends Controller
         ]);
     }
 
-    public function reportPaymentFailure(Request $request, int $id): JsonResponse
+    private function processReportPaymentFailure(Request $request, int $id): JsonResponse
     {
         $booking = SeminarBooking::with('seminar')->findOrFail($id);
 
@@ -226,7 +275,7 @@ class SeminarBookingController extends Controller
         ], 200);
     }
 
-    public function myBookings(Request $request): JsonResponse
+    private function processMyBookings(Request $request): JsonResponse
     {
         $user = $request->user();
         if (!$user) {
@@ -240,6 +289,17 @@ class SeminarBookingController extends Controller
             ->map(fn (SeminarBooking $b) => $this->serializeBooking($b));
 
         return response()->json(['ok' => true, 'bookings' => $bookings]);
+    }
+
+    private function jsonDbError(QueryException $e): JsonResponse
+    {
+        Log::error('Seminar booking DB error', ['error' => $e->getMessage()]);
+
+        return response()->json([
+            'ok' => false,
+            'message' => 'Booking system is being updated. Please try again in a few minutes.',
+            'code' => 'schema_not_ready',
+        ], 503);
     }
 
     private function bookingResponse(SeminarBooking $booking, Seminar $seminar): array

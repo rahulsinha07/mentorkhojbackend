@@ -160,13 +160,14 @@ class MentorDashboardController extends Controller
             $mentor->category_ids = json_encode($request->category_ids);
         }
 
-        $existing = MentorImageService::existingFilenames($mentor->images_array);
-        $remove = $request->input('remove_images', []);
-        $newFiles = $request->file('images') ?? [];
         try {
-            if (!empty($newFiles) || !empty($remove) || $existing !== $mentor->images_array) {
-                $merged = MentorImageService::merge($existing, $remove, $newFiles);
-                $mentor->images = json_encode($merged ?: ['default.png']);
+            $updatedImages = MentorImageService::applyImageUpdate(
+                $mentor,
+                $request->input('remove_images', []),
+                $request->file('images') ?? [],
+            );
+            if ($updatedImages !== null) {
+                $mentor->images = $updatedImages;
             }
         } catch (\RuntimeException $e) {
             return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);

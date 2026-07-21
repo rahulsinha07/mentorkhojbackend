@@ -1,5 +1,6 @@
 <?php
 
+use App\CentralLogics\DeployHealthLogic;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\GuestUserController;
 use App\Http\Controllers\Api\V1\CustomerController;
@@ -23,7 +24,6 @@ use App\Http\Controllers\Api\V1\ProductController;
 use App\Http\Controllers\Api\V1\Auth\CustomerAuthController;
 use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\Auth\DeliveryManLoginController;
-use Illuminate\Support\Facades\Schema;
 
 Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function () {
 
@@ -54,16 +54,10 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
     });
 
     Route::get('deploy-health', function () {
-        $checks = [
-            'seminar_bookings_table' => Schema::hasTable('seminar_bookings'),
-            'mentor_welcome_email_column' => Schema::hasColumn('mentors', 'welcome_email_sent_at'),
-            'mentor_booking_email_columns' => Schema::hasColumn('mentor_bookings', 'mentee_booked_email_sent_at'),
-            'mentor_welcome_mail_logic' => class_exists(\App\CentralLogics\MentorWelcomeMailLogic::class),
-            'mentor_booking_mail_logic' => class_exists(\App\CentralLogics\MentorBookingMailLogic::class),
-        ];
+        $checks = DeployHealthLogic::checks();
 
         return response()->json([
-            'ok' => !in_array(false, $checks, true),
+            'ok' => DeployHealthLogic::ok(),
             'checks' => $checks,
         ]);
     });

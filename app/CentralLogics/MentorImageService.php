@@ -14,6 +14,8 @@ class MentorImageService
     private const DISK = 'public';
     private const DIR = 'product/';
 
+    private const PLACEHOLDERS = ['default.png', 'def.png'];
+
     /**
      * Upload new mentor profile images to the same product/ folder as legacy mentors.
      *
@@ -53,14 +55,14 @@ class MentorImageService
 
     public static function deleteFilename(string $filename): void
     {
-        if ($filename && !in_array($filename, ['default.png', 'def.png'], true)) {
+        if ($filename && !in_array($filename, self::PLACEHOLDERS, true)) {
             Helpers::delete(self::DIR . $filename);
         }
     }
 
     public static function fileExists(?string $filename): bool
     {
-        if (!$filename || in_array($filename, ['default.png', 'def.png'], true)) {
+        if (!$filename || in_array($filename, self::PLACEHOLDERS, true)) {
             return false;
         }
 
@@ -77,15 +79,34 @@ class MentorImageService
     }
 
     /**
+     * Stored filenames from DB, excluding placeholders.
+     *
+     * @param string[] $files
+     * @return string[]
+     */
+    public static function storedFilenames(array $files): array
+    {
+        return array_values(array_filter(
+            $files,
+            fn ($filename) => $filename && !in_array($filename, self::PLACEHOLDERS, true),
+        ));
+    }
+
+    /**
      * Mentor photos for public API — mentor uploads first, then legacy product images.
+     * Returns disk-verified filenames when available; falls back to DB filenames for display.
      *
      * @return string[]
      */
     public static function resolvePublicFilenames(Mentor $mentor): array
     {
-        $existing = self::existingFilenames($mentor->images_array);
-        if (!empty($existing)) {
-            return $existing;
+        $stored = self::storedFilenames($mentor->images_array);
+        $verified = self::existingFilenames($stored);
+        if (!empty($verified)) {
+            return $verified;
+        }
+        if (!empty($stored)) {
+            return $stored;
         }
 
         if (!$mentor->legacy_product_id) {
@@ -103,14 +124,31 @@ class MentorImageService
             $images = is_array($decoded) ? $decoded : [$images];
         }
 
-        return self::existingFilenames(is_array($images) ? $images : []);
+        if (!is_array($images)) {
+            return [];
+        }
+
+        $legacyStored = self::storedFilenames($images);
+        $legacyVerified = self::existingFilenames($legacyStored);
+
+        return !empty($legacyVerified) ? $legacyVerified : $legacyStored;
+    }
+
+    /** First filename that exists on disk (for streaming / photo_url). */
+    public static function firstStreamableFilename(Mentor $mentor): ?string
+    {
+        foreach (self::resolvePublicFilenames($mentor) as $filename) {
+            if (self::fileExists($filename)) {
+                return $filename;
+            }
+        }
+
+        return null;
     }
 
     public static function firstPublicFilename(Mentor $mentor): ?string
     {
-        $files = self::resolvePublicFilenames($mentor);
-
-        return $files[0] ?? null;
+        return self::firstStreamableFilename($mentor);
     }
 
     public static function publicAssetUrl(?string $filename): ?string
@@ -124,7 +162,7 @@ class MentorImageService
 
     public static function apiPhotoUrl(Mentor $mentor): ?string
     {
-        if (!self::firstPublicFilename($mentor)) {
+        if (!self::firstStreamableFilename($mentor)) {
             return null;
         }
 
@@ -135,7 +173,7 @@ class MentorImageService
 
     public static function streamFirstPhoto(Mentor $mentor): ?StreamedResponse
     {
-        $filename = self::firstPublicFilename($mentor);
+        $filename = self::firstStreamableFilename($mentor);
         if (!$filename) {
             return null;
         }
@@ -150,12 +188,12 @@ class MentorImageService
     /** @return array{url: string, missing: bool, filename: ?string} */
     public static function adminListThumbnail(Mentor $mentor): array
     {
-        $filename = self::firstPublicFilename($mentor);
+        $filename = self::firstStreamableFilename($mentor);
         $placeholder = asset('public/assets/admin/img/400x400/img2.jpg');
 
         if (!$filename) {
             $first = $mentor->images_array[0] ?? null;
-            $hasBrokenRef = $first && !in_array($first, ['default.png', 'def.png'], true);
+            $hasBrokenRef = $first && !in_array($first, self::PLACEHOLDERS, true);
 
             return [
                 'url' => $placeholder,
@@ -169,6 +207,27 @@ class MentorImageService
             'missing' => false,
             'filename' => $filename,
         ];
+    }
+
+    /**
+     * Only allowed path for updating mentors.images on profile save.
+     * Returns null when no image change was requested (bio/social-only saves).
+     *
+     * @param UploadedFile[] $newFiles
+     * @throws \RuntimeException
+     */
+    public static function applyImageUpdate(Mentor $mentor, array $remove, array $newFiles): ?string
+    {
+        $newFiles = array_values(array_filter($newFiles));
+        $remove = array_values(array_filter($remove));
+
+        if (empty($newFiles) && empty($remove)) {
+            return null;
+        }
+
+        $merged = self::merge($mentor->images_array, $remove, $newFiles);
+
+        return json_encode($merged ?: ['default.png']);
     }
 
     /**
