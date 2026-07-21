@@ -26,7 +26,7 @@
 <body class="toolbar-enabled">
 
 <nav class="navbar navbar-light bg-light justify-content-between">
-    <h1 class="text-primary text-uppercase header-text">{{ Helpers::get_business_settings('restaurant_name') ?? translate('GroFresh') }}</h1>
+    <h1 class="text-primary text-uppercase header-text">{{ Helpers::get_business_settings('restaurant_name') ?? 'MentorKhoj' }}</h1>
 </nav>
 
 <div class="container pb-5 mb-2 mb-md-4">

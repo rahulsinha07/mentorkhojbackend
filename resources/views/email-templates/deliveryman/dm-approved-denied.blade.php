@@ -106,7 +106,7 @@ foreach ($socialMediaList as $social) {
             <td style="padding:0 30px 30px; text-align:left">
                 <span style="font-weight:500;display:block;margin: 20px 0 11px;">{{ translate('Hi') }} {{ $dm->f_name .' '. $dm->l_name }},</span>
                 @if($dm->application_status == 'approved')
-                    <span style="display:block;margin-bottom:14px">{{ translate('Your registration request has been approved by admin. Now you can login to GroFresh deliveryman app and view all the options') }}</span>
+                    <span style="display:block;margin-bottom:14px">{{ translate('Your registration request has been approved by admin. Now you can login to the MentorKhoj deliveryman app and view all the options') }}</span>
                 @endif
                 @if($dm->application_status == 'denied')
                     <span style="display:block;margin-bottom:14px">{{ translate('Your registration request has been denied by admin.') }}</span>

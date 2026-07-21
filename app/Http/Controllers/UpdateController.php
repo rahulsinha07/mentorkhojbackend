@@ -31,7 +31,6 @@ class UpdateController extends Controller
         Helpers::setEnvironmentValue('BUYER_USERNAME', $request['username']);
         Helpers::setEnvironmentValue('PURCHASE_CODE', $request['purchase_key']);
         Helpers::setEnvironmentValue('SOFTWARE_VERSION', '7.3');
-        Helpers::setEnvironmentValue('APP_NAME', 'grofresh');
         Helpers::setEnvironmentValue('APP_MODE', 'live');
 
         Artisan::call('migrate', ['--force' => true]);

@@ -2,12 +2,12 @@
 
 @section('content')
     <div class="text-center text-white mb-4">
-        <h2>{{ translate('GroFresh Software Installation') }}</h2>
+        <h2>{{ translate('MentorKhoj Software Installation') }}</h2>
         <h6 class="fw-normal">{{ translate('Please proceed step by step with proper data according to instructions') }}</h6>
     </div>
 
     <div class="pb-2">
-        <div class="progress cursor-pointer" role="progressbar" aria-label="Grofresh Software Installation"
+        <div class="progress cursor-pointer" role="progressbar" aria-label="MentorKhoj Software Installation"
              aria-valuenow="20" aria-valuemin="0" aria-valuemax="100" data-bs-toggle="tooltip"
              data-bs-placement="top" data-bs-custom-class="custom-progress-tooltip" data-bs-title="First Step!"
              data-bs-delay='{"hide":1000}'>
@@ -18,7 +18,7 @@
     <div class="card mt-4">
         <div class="p-4 mb-md-3 mx-xl-4 px-md-5">
             <div class="d-flex justify-content-end mb-2">
-                <a href="https://docs.6amtech.com/docs-grofresh/intro" class="d-flex align-items-center gap-1"
+                <a href="https://www.mentorkhoj.com" class="d-flex align-items-center gap-1"
                    target="_blank">
                     {{ translate('Read Documentation') }}
                     <span data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="custom-tooltip"

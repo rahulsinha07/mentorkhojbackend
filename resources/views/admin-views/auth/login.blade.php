@@ -23,7 +23,7 @@
         <div class="auth-wrapper-left">
             <div class="auth-left-cont">
                 <img src="{{ $logo }}" alt="{{ translate('logo') }}">
-                <h2 class="title">{{translate('Your')}} <span class="d-block">{{translate('All Fresh Food')}}</span> <strong class="text--039D55">{{translate('in one Place')}}....</strong></h2>
+                <h2 class="title">{{translate('Find mentors.')}} <span class="d-block">{{translate('Book sessions.')}}</span> <strong class="text--039D55">{{translate('Grow faster.')}}</strong></h2>
             </div>
         </div>
         <div class="auth-wrapper-right">

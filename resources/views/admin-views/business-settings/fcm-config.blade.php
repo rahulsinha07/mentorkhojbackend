@@ -91,7 +91,7 @@
                                 <p>
                                     {{translate('Please_check_the_documentation_below_for_detailed_instructions_on_setting_up_your_mobile_app_to_receive_Firebase_Cloud_Messaging_(FCM)_notifications.')}}
                                 </p>
-                                <a href="https://docs.6amtech.com/docs-grofresh/mobile-apps/mandatory-setup#setup-firebase-for-push-notification" target="_blank" >{{translate('Click Here')}}</a>
+                                <a href="https://www.mentorkhoj.com" target="_blank" >{{translate('Click Here')}}</a>
                             </div>
                         </div>
                     </div>

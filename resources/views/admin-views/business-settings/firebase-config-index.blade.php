@@ -51,15 +51,15 @@
 
                         <div class="form-group">
                             <label class="form-label">{{translate('Auth Domain')}}</label><br>
-                            <input type="text" class="form-control" name="authDomain" value="{{env('APP_MODE')!='demo'?$data['authDomain']:''}}" required autocomplete="off" placeholder="{{translate('Ex : grofresh-3986f.firebaseapp.com')}}">
+                            <input type="text" class="form-control" name="authDomain" value="{{env('APP_MODE')!='demo'?$data['authDomain']:''}}" required autocomplete="off" placeholder="{{translate('Ex : mentorkhoj-app.firebaseapp.com')}}">
                         </div>
                         <div class="form-group">
                             <label class="form-label">{{translate('Project ID')}}</label><br>
-                            <input type="text" class="form-control" name="projectId" value="{{env('APP_MODE')!='demo'?$data['projectId']:''}}" required autocomplete="off" placeholder="{{translate('Ex : grofresh-3986f')}}">
+                            <input type="text" class="form-control" name="projectId" value="{{env('APP_MODE')!='demo'?$data['projectId']:''}}" required autocomplete="off" placeholder="{{translate('Ex : mentorkhoj-app')}}">
                         </div>
                         <div class="form-group">
                             <label class="form-label">{{translate('Storage Bucket')}}</label><br>
-                            <input type="text" class="form-control" name="storageBucket" value="{{env('APP_MODE')!='demo'?$data['storageBucket']:''}}" required autocomplete="off" placeholder="{{translate('Ex : grofresh-3986f.appspot.com')}}">
+                            <input type="text" class="form-control" name="storageBucket" value="{{env('APP_MODE')!='demo'?$data['storageBucket']:''}}" required autocomplete="off" placeholder="{{translate('Ex : mentorkhoj-app.appspot.com')}}">
                         </div>
 
                         <div class="form-group">

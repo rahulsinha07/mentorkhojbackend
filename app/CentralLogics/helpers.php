@@ -285,7 +285,7 @@ class Helpers
 
         $image = asset('storage/app/public/notification') . '/' . $data['image'];
         $postdata = '{
-            "to" : "/topics/grofresh",
+            "to" : "/topics/mentorkhoj",
             "mutable-content": "true",
             "data" : {
                 "title" :"' . $data['title'] . '",
