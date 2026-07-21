@@ -72,34 +72,63 @@ class PostDeploy extends Command
             return;
         }
 
+        if (!class_exists(\ZipArchive::class)) {
+            $this->warn('ZipArchive is not available — skipping photo backup (deploy continues).');
+
+            return;
+        }
+
         $backupDir = storage_path('app/backups');
         if (!is_dir($backupDir)) {
             mkdir($backupDir, 0755, true);
         }
 
-        $archive = $backupDir . '/product-' . date('Ymd-His') . '.tar.gz';
-        $parent = dirname($productDir);
-        $command = sprintf(
-            'tar -czf %s -C %s product 2>/dev/null',
-            escapeshellarg($archive),
-            escapeshellarg($parent),
-        );
-
-        exec($command, $output, $exitCode);
-
-        if ($exitCode === 0 && is_file($archive)) {
-            $this->info('Backed up mentor photos to ' . $archive);
-            $this->pruneOldBackups($backupDir, 5);
+        $archive = $backupDir . '/product-' . date('Ymd-His') . '.zip';
+        $zip = new \ZipArchive();
+        if ($zip->open($archive, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            $this->warn('Could not create product photo backup — deploy continues.');
 
             return;
         }
 
-        $this->warn('Could not create product photo backup — continue deploy manually only if you have another backup.');
+        $this->addDirectoryToZip($zip, $productDir, 'product');
+        $zip->close();
+
+        if (!is_file($archive)) {
+            $this->warn('Could not create product photo backup — deploy continues.');
+
+            return;
+        }
+
+        $this->info('Backed up mentor photos to ' . $archive);
+        $this->pruneOldBackups($backupDir, 5);
+    }
+
+    private function addDirectoryToZip(\ZipArchive $zip, string $dir, string $zipPrefix): void
+    {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST,
+        );
+
+        foreach ($iterator as $file) {
+            $path = $file->getPathname();
+            $relative = $zipPrefix . '/' . ltrim(str_replace('\\', '/', substr($path, strlen($dir))), '/');
+
+            if ($file->isDir()) {
+                $zip->addEmptyDir($relative);
+            } else {
+                $zip->addFile($path, $relative);
+            }
+        }
     }
 
     private function pruneOldBackups(string $backupDir, int $keep): void
     {
-        $files = glob($backupDir . '/product-*.tar.gz') ?: [];
+        $files = array_merge(
+            glob($backupDir . '/product-*.zip') ?: [],
+            glob($backupDir . '/product-*.tar.gz') ?: [],
+        );
         rsort($files);
 
         foreach (array_slice($files, $keep) as $old) {
