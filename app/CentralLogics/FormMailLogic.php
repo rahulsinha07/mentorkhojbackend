@@ -37,6 +37,13 @@ class FormMailLogic
         return 'admin@mentorkhoj.com';
     }
 
+    public static function notifyEmail(): string
+    {
+        $fromEnv = trim((string) config('app.mentorkhoj_notify_email', ''));
+
+        return $fromEnv !== '' ? $fromEnv : 'mentorkhoj@gmail.com';
+    }
+
     /** @return array<string, string> */
     public static function brandContext(): array
     {

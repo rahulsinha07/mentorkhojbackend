@@ -60,6 +60,8 @@ return [
 
     'mentorkhoj_admin_email' => env('MENTORKHOJ_ADMIN_EMAIL', 'admin@mentorkhoj.com'),
 
+    'mentorkhoj_notify_email' => env('MENTORKHOJ_NOTIFY_EMAIL', 'mentorkhoj@gmail.com'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

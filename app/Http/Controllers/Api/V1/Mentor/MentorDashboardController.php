@@ -6,6 +6,7 @@ use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorEarningsLogic;
 use App\CentralLogics\MentorImageService;
 use App\CentralLogics\MentorLogic;
+use App\CentralLogics\MentorWelcomeMailLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorSetting;
@@ -91,9 +92,14 @@ class MentorDashboardController extends Controller
 
         MentorSetting::create(['mentor_id' => $mentor->id]);
 
+        $user = $request->user();
+        MentorWelcomeMailLogic::sendWelcomeEmail($mentor, $user);
+        $mentor = $mentor->fresh(['services']);
+
         return response()->json([
             'message' => 'Mentor profile created',
-            'mentor' => MentorLogic::formatPublic($mentor->fresh('services'), true),
+            'mentor' => MentorLogic::formatPublic($mentor, true),
+            'welcome_email_sent' => (bool) $mentor->welcome_email_sent_at,
         ], 201);
     }
 
