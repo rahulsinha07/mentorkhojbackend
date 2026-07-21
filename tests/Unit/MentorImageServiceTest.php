@@ -91,4 +91,31 @@ class MentorImageServiceTest extends TestCase
             MentorImageService::storedFilenames(['default.png', 'real.png', 'def.png']),
         );
     }
+
+    public function test_mentor_controllers_do_not_use_destructive_image_wipe_pattern(): void
+    {
+        $files = [
+            base_path('app/Http/Controllers/Api/V1/Mentor/MentorDashboardController.php'),
+            base_path('app/Http/Controllers/Admin/MentorController.php'),
+        ];
+
+        foreach ($files as $file) {
+            $contents = file_get_contents($file);
+            $this->assertStringNotContainsString(
+                '$existing !== $mentor->images_array',
+                $contents,
+                basename($file) . ' must not reintroduce automatic image wipe on profile save.',
+            );
+            $this->assertStringNotContainsString(
+                'existingFilenames($mentor->images_array)',
+                $contents,
+                basename($file) . ' must use applyImageUpdate() instead of disk-filtered existing filenames.',
+            );
+            $this->assertStringContainsString(
+                'applyImageUpdate',
+                $contents,
+                basename($file) . ' must route image updates through applyImageUpdate().',
+            );
+        }
+    }
 }

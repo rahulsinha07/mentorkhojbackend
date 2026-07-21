@@ -21,6 +21,7 @@ class DeployHealthLogic
             'mentor_welcome_mail_logic' => class_exists(MentorWelcomeMailLogic::class),
             'mentor_booking_mail_logic' => class_exists(MentorBookingMailLogic::class),
             'razorpay_configured' => !empty($razorpay['key_id']) && !empty($razorpay['key_secret']),
+            'mentor_photos_on_disk' => Schema::hasTable('mentors') && MentorPhotoAuditLogic::allPhotosOnDisk(),
         ];
     }
 

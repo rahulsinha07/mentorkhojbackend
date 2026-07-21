@@ -55,10 +55,12 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
 
     Route::get('deploy-health', function () {
         $checks = DeployHealthLogic::checks();
+        $missingPhotos = \App\CentralLogics\MentorPhotoAuditLogic::missingFiles();
 
         return response()->json([
             'ok' => DeployHealthLogic::ok(),
             'checks' => $checks,
+            'mentor_photos_missing' => $missingPhotos,
         ]);
     });
 

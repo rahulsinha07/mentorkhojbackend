@@ -9,6 +9,19 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * Mentor profile photo storage and API rules.
+ *
+ * Disk path: storage/app/public/product/{filename}
+ * DB column: mentors.images (JSON array of filenames)
+ *
+ * When changing backend code:
+ * - Never set mentors.images directly — use applyImageUpdate() on profile save.
+ * - Never filter mentors.images_array through fileExists() before saving to DB.
+ * - Never delete product/ files except via deleteFilename() on explicit user remove.
+ * - Public API image list uses resolvePublicFilenames() (DB fallback when disk check fails).
+ * - Run mentorkhoj:audit-mentor-photos after every deploy.
+ */
 class MentorImageService
 {
     private const DISK = 'public';

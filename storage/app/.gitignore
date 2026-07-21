@@ -2,4 +2,6 @@
 !public/
 !public/product/
 !public/product/default.png
+!backups/
+!backups/.gitignore
 !.gitignore

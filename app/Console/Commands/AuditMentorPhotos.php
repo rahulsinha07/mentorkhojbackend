@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\CentralLogics\MentorImageService;
+use App\CentralLogics\MentorPhotoAuditLogic;
 use App\Model\Mentor\Mentor;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
@@ -15,11 +16,13 @@ class AuditMentorPhotos extends Command
 
     public function handle(): int
     {
-        $missing = 0;
-        $mentors = Mentor::with('user')->orderBy('id')->get(['id', 'username', 'display_name', 'images', 'user_id']);
+        $missing = MentorPhotoAuditLogic::missingFiles();
 
         $this->info('Mentor photo audit');
         $this->newLine();
+
+        $mentors = Mentor::with('user')->orderBy('id')->get(['id', 'username', 'display_name', 'images', 'user_id']);
+        $missingKeys = collect($missing)->map(fn ($row) => $row['id'] . ':' . $row['filename'])->flip();
 
         foreach ($mentors as $mentor) {
             $stored = MentorImageService::storedFilenames($mentor->images_array);
@@ -29,11 +32,9 @@ class AuditMentorPhotos extends Command
             }
 
             foreach ($stored as $filename) {
-                $onDisk = MentorImageService::fileExists($filename);
+                $key = $mentor->id . ':' . $filename;
+                $onDisk = !isset($missingKeys[$key]);
                 $status = $onDisk ? 'OK' : 'MISSING';
-                if (!$onDisk) {
-                    $missing++;
-                }
                 $this->line(sprintf('  [%s] #%d %s — %s', $status, $mentor->id, $mentor->username, $filename));
             }
 
@@ -52,8 +53,8 @@ class AuditMentorPhotos extends Command
         }
 
         $this->newLine();
-        if ($missing > 0) {
-            $this->warn("{$missing} mentor photo file(s) missing on disk — restore from backup or re-upload in admin.");
+        if (!empty($missing)) {
+            $this->warn(count($missing) . ' mentor photo file(s) missing on disk — restore from backup or re-upload in admin.');
 
             return self::FAILURE;
         }

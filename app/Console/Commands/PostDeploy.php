@@ -14,6 +14,8 @@ class PostDeploy extends Command
 
     public function handle(): int
     {
+        $this->backupProductPhotos();
+
         $this->info('Running database migrations...');
         Artisan::call('migrate', ['--force' => true]);
         $this->line(trim(Artisan::output()));
@@ -46,12 +48,63 @@ class PostDeploy extends Command
 
         $this->newLine();
         $this->info('Running mentor photo audit...');
-        Artisan::call('mentorkhoj:audit-mentor-photos');
+        $auditExit = Artisan::call('mentorkhoj:audit-mentor-photos');
         $this->line(trim(Artisan::output()));
+
+        if ($auditExit !== self::SUCCESS) {
+            $this->error('Post-deploy blocked: mentor photo files are missing on disk.');
+            $this->line('Restore from the latest backup in storage/app/backups/ or re-upload in Admin → Mentors.');
+
+            return self::FAILURE;
+        }
 
         $this->info('Post-deploy complete.');
 
         return self::SUCCESS;
+    }
+
+    private function backupProductPhotos(): void
+    {
+        $productDir = storage_path('app/public/product');
+        if (!is_dir($productDir)) {
+            $this->warn('Product photo folder not found — skipping backup.');
+
+            return;
+        }
+
+        $backupDir = storage_path('app/backups');
+        if (!is_dir($backupDir)) {
+            mkdir($backupDir, 0755, true);
+        }
+
+        $archive = $backupDir . '/product-' . date('Ymd-His') . '.tar.gz';
+        $parent = dirname($productDir);
+        $command = sprintf(
+            'tar -czf %s -C %s product 2>/dev/null',
+            escapeshellarg($archive),
+            escapeshellarg($parent),
+        );
+
+        exec($command, $output, $exitCode);
+
+        if ($exitCode === 0 && is_file($archive)) {
+            $this->info('Backed up mentor photos to ' . $archive);
+            $this->pruneOldBackups($backupDir, 5);
+
+            return;
+        }
+
+        $this->warn('Could not create product photo backup — continue deploy manually only if you have another backup.');
+    }
+
+    private function pruneOldBackups(string $backupDir, int $keep): void
+    {
+        $files = glob($backupDir . '/product-*.tar.gz') ?: [];
+        rsort($files);
+
+        foreach (array_slice($files, $keep) as $old) {
+            @unlink($old);
+        }
     }
 
     private function ensureDefaultMentorPlaceholder(): void
