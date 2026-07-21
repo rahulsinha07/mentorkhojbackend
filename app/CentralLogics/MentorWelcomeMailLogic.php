@@ -6,6 +6,7 @@ use App\Model\Mentor\Mentor;
 use App\User;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 
 class MentorWelcomeMailLogic
 {
@@ -17,7 +18,7 @@ class MentorWelcomeMailLogic
             return false;
         }
 
-        if ($mentor->welcome_email_sent_at) {
+        if (self::hasWelcomeEmailColumn() && $mentor->welcome_email_sent_at) {
             return true;
         }
 
@@ -41,8 +42,10 @@ class MentorWelcomeMailLogic
                     FormMailLogic::withBrandPublic(self::welcomeContext($mentor, $user))
                 ));
 
-            $mentor->welcome_email_sent_at = now();
-            $mentor->save();
+            if (self::hasWelcomeEmailColumn()) {
+                $mentor->welcome_email_sent_at = now();
+                $mentor->save();
+            }
 
             return true;
         } catch (\Throwable $e) {
@@ -71,6 +74,11 @@ class MentorWelcomeMailLogic
             'login_medium' => self::loginMediumLabel($user->login_medium),
             'support_email' => FormMailLogic::adminEmail(),
         ];
+    }
+
+    private static function hasWelcomeEmailColumn(): bool
+    {
+        return Schema::hasColumn('mentors', 'welcome_email_sent_at');
     }
 
     private static function resolveUserEmail(User $user): ?string

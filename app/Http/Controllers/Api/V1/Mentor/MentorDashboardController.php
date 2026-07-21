@@ -14,6 +14,7 @@ use App\Model\Mentor\MentorShareLog;
 use App\Model\Mentor\MentorShareTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
 class MentorDashboardController extends Controller
@@ -93,13 +94,23 @@ class MentorDashboardController extends Controller
         MentorSetting::create(['mentor_id' => $mentor->id]);
 
         $user = $request->user();
-        MentorWelcomeMailLogic::sendWelcomeEmail($mentor, $user);
+        $welcomeEmailSent = false;
+
+        try {
+            $welcomeEmailSent = MentorWelcomeMailLogic::sendWelcomeEmail($mentor, $user);
+        } catch (\Throwable $e) {
+            Log::warning('Mentor welcome email error: ' . $e->getMessage(), [
+                'mentor_id' => $mentor->id,
+                'user_id' => $user->id,
+            ]);
+        }
+
         $mentor = $mentor->fresh(['services']);
 
         return response()->json([
             'message' => 'Mentor profile created',
             'mentor' => MentorLogic::formatPublic($mentor, true),
-            'welcome_email_sent' => (bool) $mentor->welcome_email_sent_at,
+            'welcome_email_sent' => $welcomeEmailSent || (bool) ($mentor->welcome_email_sent_at ?? false),
         ], 201);
     }
 

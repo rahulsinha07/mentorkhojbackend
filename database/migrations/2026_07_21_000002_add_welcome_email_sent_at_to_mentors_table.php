@@ -9,14 +9,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('mentors', function (Blueprint $table) {
-            $table->timestamp('welcome_email_sent_at')->nullable()->after('is_published');
+            if (!Schema::hasColumn('mentors', 'welcome_email_sent_at')) {
+                $table->timestamp('welcome_email_sent_at')->nullable();
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('mentors', function (Blueprint $table) {
-            $table->dropColumn('welcome_email_sent_at');
+            if (Schema::hasColumn('mentors', 'welcome_email_sent_at')) {
+                $table->dropColumn('welcome_email_sent_at');
+            }
         });
     }
 };

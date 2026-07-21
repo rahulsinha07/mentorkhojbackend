@@ -7,8 +7,8 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>@yield('title')</title>
-    @php($icon = \App\Model\BusinessSetting::where(['key' => 'fav_icon'])->first()->value)
-    <link rel="icon" type="image/x-icon" href="{{ asset('storage/app/public/restaurant/' . $icon ?? '') }}">
+    @php($icon = \App\Model\BusinessSetting::where(['key' => 'fav_icon'])->first()?->value ?? '')
+    <link rel="icon" type="image/x-icon" href="{{ asset('storage/app/public/restaurant/' . $icon) }}">
     <link rel="shortcut icon" href="">
     <link rel="stylesheet" href="{{asset('public/assets/admin')}}/css/vendor.min.css">
     <link rel="stylesheet" href="{{asset('public/assets/admin')}}/vendor/icon-set/style.css">
