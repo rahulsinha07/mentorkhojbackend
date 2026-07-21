@@ -141,10 +141,6 @@ class MentorBookingLogic
         $orderStatus = (string) ($order->order_status ?? 'pending');
         if ($orderStatus === 'delivered' || $orderStatus === 'completed') {
             $booking->status = 'completed';
-        } elseif ($orderStatus === 'confirmed' || $orderStatus === 'processing') {
-            if ($booking->status === 'requested' && $booking->payment_status === 'paid') {
-                $booking->status = 'confirmed';
-            }
         } elseif (in_array($orderStatus, ['cancelled', 'canceled', 'failed', 'returned'], true)) {
             $booking->status = 'cancelled';
             if ($booking->payment_status !== 'paid') {
@@ -159,6 +155,199 @@ class MentorBookingLogic
 
         if ($previousStatus !== 'confirmed' && $booking->status === 'confirmed') {
             MentorBookingMailLogic::sendMenteeConfirmedEmail($booking);
+        }
+    }
+
+    public static function markPaid(MentorBooking $booking, ?Order $order = null): MentorBooking
+    {
+        if ($booking->payment_status === 'paid') {
+            MentorBookingMailLogic::maybeSendAfterPayment($booking->fresh());
+
+            return $booking->fresh();
+        }
+
+        if ($order) {
+            self::syncFromLegacyOrder($booking, $order);
+
+            return $booking->fresh();
+        }
+
+        $booking->update([
+            'payment_status' => 'paid',
+            'status' => $booking->status === 'cancelled' ? 'requested' : $booking->status,
+        ]);
+
+        if (!$booking->earnings()->exists()) {
+            MentorEarningsLogic::creditBooking($booking);
+        }
+
+        $booking = $booking->fresh();
+        MentorBookingMailLogic::maybeSendAfterPayment($booking);
+
+        return $booking;
+    }
+
+    /**
+     * Verify a Razorpay payment and mark the mentor booking as paid.
+     *
+     * @param  array<string, mixed>  $paymentData
+     */
+    public static function verifyAndMarkPaid(MentorBooking $booking, array $paymentData): MentorBooking
+    {
+        if ($booking->payment_status === 'paid') {
+            return self::markPaid($booking);
+        }
+
+        if (!empty($booking->legacy_order_id)) {
+            $order = Order::find($booking->legacy_order_id);
+            if ($order && in_array((string) $order->payment_status, ['paid', 'partially_paid'], true)) {
+                return self::markPaid($booking, $order);
+            }
+        }
+
+        $transactionReference = trim((string) (
+            $paymentData['transaction_reference']
+            ?? $paymentData['razorpay_payment_id']
+            ?? ''
+        ));
+
+        if ($transactionReference !== '') {
+            $linkedOrder = Order::where('transaction_reference', $transactionReference)
+                ->where('user_id', $booking->mentee_user_id)
+                ->latest('id')
+                ->first();
+
+            if ($linkedOrder && in_array((string) $linkedOrder->payment_status, ['paid', 'partially_paid'], true)) {
+                return self::markPaid($booking, $linkedOrder);
+            }
+
+            self::assertRazorpayPaymentMatchesBooking($booking, $transactionReference);
+
+            if (!empty($booking->legacy_order_id)) {
+                Order::where('id', $booking->legacy_order_id)->update([
+                    'transaction_reference' => $transactionReference,
+                    'payment_status' => 'paid',
+                    'order_status' => 'confirmed',
+                ]);
+            }
+
+            return self::markPaid($booking);
+        }
+
+        if (!empty($paymentData['razorpay_order_id'])
+            && !empty($paymentData['razorpay_payment_id'])
+            && !empty($paymentData['razorpay_signature'])) {
+            self::assertRazorpaySignature(
+                (string) $paymentData['razorpay_order_id'],
+                (string) $paymentData['razorpay_payment_id'],
+                (string) $paymentData['razorpay_signature'],
+            );
+
+            if (!empty($booking->legacy_order_id)) {
+                Order::where('id', $booking->legacy_order_id)->update([
+                    'transaction_reference' => (string) $paymentData['razorpay_payment_id'],
+                    'payment_status' => 'paid',
+                    'order_status' => 'confirmed',
+                ]);
+            }
+
+            return self::markPaid($booking);
+        }
+
+        throw new \RuntimeException('Payment details are missing or invalid.');
+    }
+
+    public static function syncPendingPaidBookingsForUser(int $userId): int
+    {
+        $synced = 0;
+
+        $bookings = MentorBooking::where('mentee_user_id', $userId)
+            ->where('payment_status', 'pending')
+            ->whereNotNull('legacy_order_id')
+            ->get();
+
+        foreach ($bookings as $booking) {
+            $order = Order::find($booking->legacy_order_id);
+            if ($order && in_array((string) $order->payment_status, ['paid', 'partially_paid'], true)) {
+                self::syncFromLegacyOrder($booking, $order);
+                $synced++;
+            }
+        }
+
+        return $synced;
+    }
+
+    public static function resendMissingBookingEmails(?int $bookingId = null): array
+    {
+        $query = MentorBooking::query()
+            ->where('payment_status', 'paid')
+            ->with(['mentor.user', 'service', 'mentee']);
+
+        if ($bookingId) {
+            $query->where('id', $bookingId);
+        }
+
+        $menteeSent = 0;
+        $mentorSent = 0;
+
+        foreach ($query->get() as $booking) {
+            $hadMenteeEmail = (bool) ($booking->mentee_booked_email_sent_at ?? false);
+            $hadMentorEmail = (bool) ($booking->mentor_notify_email_sent_at ?? false);
+
+            MentorBookingMailLogic::sendBookingPlacedEmails($booking);
+            $booking = $booking->fresh();
+
+            if (!$hadMenteeEmail && ($booking->mentee_booked_email_sent_at ?? false)) {
+                $menteeSent++;
+            }
+            if (!$hadMentorEmail && ($booking->mentor_notify_email_sent_at ?? false)) {
+                $mentorSent++;
+            }
+        }
+
+        return [
+            'mentee_emails_sent' => $menteeSent,
+            'mentor_emails_sent' => $mentorSent,
+        ];
+    }
+
+    private static function assertRazorpayPaymentMatchesBooking(MentorBooking $booking, string $transactionReference): void
+    {
+        $creds = app(\App\Services\RazorpaySeminarService::class)->credentials();
+        if (!$creds['key_id'] || !$creds['key_secret']) {
+            throw new \RuntimeException('RazorPay is not configured.');
+        }
+
+        $response = \Illuminate\Support\Facades\Http::withBasicAuth($creds['key_id'], $creds['key_secret'])
+            ->get('https://api.razorpay.com/v1/payments/' . $transactionReference);
+
+        if (!$response->successful()) {
+            throw new \RuntimeException('Could not verify payment.');
+        }
+
+        $payment = $response->json();
+        $status = (string) ($payment['status'] ?? '');
+        if (!in_array($status, ['captured', 'authorized'], true)) {
+            throw new \RuntimeException('Payment was not completed.');
+        }
+
+        $expectedPaise = (int) round(((float) $booking->amount + (float) $booking->tax_amount) * 100);
+        $paidPaise = (int) ($payment['amount'] ?? 0);
+        if ($paidPaise > 0 && $expectedPaise > 0 && $paidPaise !== $expectedPaise) {
+            throw new \RuntimeException('Payment amount does not match booking fee.');
+        }
+    }
+
+    private static function assertRazorpaySignature(string $orderId, string $paymentId, string $signature): void
+    {
+        $secret = app(\App\Services\RazorpaySeminarService::class)->credentials()['key_secret'];
+        if (!$secret) {
+            throw new \RuntimeException('RazorPay is not configured.');
+        }
+
+        $expected = hash_hmac('sha256', $orderId . '|' . $paymentId, $secret);
+        if (!hash_equals($expected, $signature)) {
+            throw new \RuntimeException('Invalid payment signature.');
         }
     }
 
@@ -217,6 +406,11 @@ class MentorBookingLogic
             'payment_status' => $booking->payment_status,
             'requires_payment' => $booking->payment_status === 'pending',
             'can_retry_payment' => $booking->payment_status === 'failed',
+            'emails_sent' => [
+                'mentee_booked' => (bool) ($booking->mentee_booked_email_sent_at ?? false),
+                'mentor_notify' => (bool) ($booking->mentor_notify_email_sent_at ?? false),
+                'mentee_confirmed' => (bool) ($booking->mentee_confirmed_email_sent_at ?? false),
+            ],
             'created_at' => $booking->created_at?->toIso8601String(),
         ];
     }

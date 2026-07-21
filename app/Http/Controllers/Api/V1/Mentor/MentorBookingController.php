@@ -79,6 +79,8 @@ class MentorBookingController extends Controller
 
     public function myBookings(Request $request): JsonResponse
     {
+        MentorBookingLogic::syncPendingPaidBookingsForUser((int) $request->user()->id);
+
         $bookings = MentorBooking::where('mentee_user_id', $request->user()->id)
             ->with(['service', 'mentor'])
             ->latest()
@@ -87,6 +89,71 @@ class MentorBookingController extends Controller
         return response()->json([
             'bookings' => collect($bookings->items())->map(fn ($b) => MentorBookingLogic::formatBooking($b)),
             'total' => $bookings->total(),
+        ]);
+    }
+
+    public function showMyBooking(Request $request, int $id): JsonResponse
+    {
+        MentorBookingLogic::syncPendingPaidBookingsForUser((int) $request->user()->id);
+
+        $booking = MentorBooking::with(['service', 'mentor'])
+            ->where('mentee_user_id', $request->user()->id)
+            ->find($id);
+
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return response()->json([
+            'booking' => MentorBookingLogic::formatBooking($booking),
+        ]);
+    }
+
+    public function verifyPayment(Request $request, int $id): JsonResponse
+    {
+        $booking = MentorBooking::with(['service', 'mentor'])->find($id);
+        if (!$booking || (int) $booking->mentee_user_id !== (int) $request->user()->id) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        if ($booking->payment_status === 'paid') {
+            MentorBookingMailLogic::maybeSendAfterPayment($booking->fresh());
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Payment confirmed! Your session is booked.',
+                'booking' => MentorBookingLogic::formatBooking($booking->fresh(['service', 'mentor'])),
+            ]);
+        }
+
+        $validated = $request->validate([
+            'razorpay_order_id' => 'required_without:transaction_reference|nullable|string',
+            'razorpay_payment_id' => 'required_with:razorpay_order_id|nullable|string',
+            'razorpay_signature' => 'required_with:razorpay_order_id|nullable|string',
+            'payment_method' => 'required_with:transaction_reference|nullable|string',
+            'transaction_reference' => 'required_without:razorpay_order_id|nullable|string',
+        ]);
+
+        try {
+            $booking = MentorBookingLogic::verifyAndMarkPaid($booking, $validated);
+        } catch (\RuntimeException $e) {
+            $booking = MentorBookingLogic::markPaymentFailed(
+                $booking,
+                $e->getMessage(),
+            );
+
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+                'booking' => MentorBookingLogic::formatBooking($booking),
+                'can_retry_payment' => true,
+            ], 400);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Payment confirmed! Your session is booked.',
+            'booking' => MentorBookingLogic::formatBooking($booking->fresh(['service', 'mentor'])),
         ]);
     }
 

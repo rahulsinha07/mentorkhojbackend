@@ -9,6 +9,7 @@ use App\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 
 class MentorBookingMailLogic
 {
@@ -23,34 +24,38 @@ class MentorBookingMailLogic
         $booking->loadMissing(['mentor.user', 'service', 'mentee']);
         $menteeSent = false;
 
-        if (!$booking->mentee_booked_email_sent_at && self::menteeEmail($booking)) {
+        if ((!self::hasEmailTimestampColumn('mentee_booked_email_sent_at') || !$booking->mentee_booked_email_sent_at) && self::menteeEmail($booking)) {
             try {
                 Mail::to(self::menteeEmail($booking))->send(new FormSubmissionMail(
                     'Your MentorKhoj session is booked | MentorKhoj',
                     'email-templates.form.mentor-booking-mentee-booked',
                     FormMailLogic::withBrandPublic(self::bookingContext($booking))
                 ));
-                $booking->mentee_booked_email_sent_at = now();
+                if (self::hasEmailTimestampColumn('mentee_booked_email_sent_at')) {
+                    $booking->mentee_booked_email_sent_at = now();
+                }
                 $menteeSent = true;
             } catch (\Throwable $e) {
                 Log::warning('Mentor booking mentee email failed: ' . $e->getMessage());
             }
         }
 
-        if (!$booking->mentor_notify_email_sent_at && self::mentorEmail($booking)) {
+        if ((!self::hasEmailTimestampColumn('mentor_notify_email_sent_at') || !$booking->mentor_notify_email_sent_at) && self::mentorEmail($booking)) {
             try {
                 Mail::to(self::mentorEmail($booking))->send(new FormSubmissionMail(
                     'New session booking — please confirm | MentorKhoj',
                     'email-templates.form.mentor-booking-mentor-confirm',
                     FormMailLogic::withBrandPublic(self::bookingContext($booking, forMentor: true))
                 ));
-                $booking->mentor_notify_email_sent_at = now();
+                if (self::hasEmailTimestampColumn('mentor_notify_email_sent_at')) {
+                    $booking->mentor_notify_email_sent_at = now();
+                }
             } catch (\Throwable $e) {
                 Log::warning('Mentor booking mentor email failed: ' . $e->getMessage());
             }
         }
 
-        if ($booking->isDirty(['mentee_booked_email_sent_at', 'mentor_notify_email_sent_at'])) {
+        if ($booking->isDirty()) {
             $booking->save();
         }
 
@@ -65,7 +70,8 @@ class MentorBookingMailLogic
 
         $booking->loadMissing(['mentor.user', 'service', 'mentee']);
 
-        if ($booking->mentee_confirmed_email_sent_at || !self::menteeEmail($booking)) {
+        if ((self::hasEmailTimestampColumn('mentee_confirmed_email_sent_at') && $booking->mentee_confirmed_email_sent_at)
+            || !self::menteeEmail($booking)) {
             return false;
         }
 
@@ -75,8 +81,10 @@ class MentorBookingMailLogic
                 'email-templates.form.mentor-booking-mentee-confirmed',
                 FormMailLogic::withBrandPublic(self::bookingContext($booking, confirmed: true))
             ));
-            $booking->mentee_confirmed_email_sent_at = now();
-            $booking->save();
+            if (self::hasEmailTimestampColumn('mentee_confirmed_email_sent_at')) {
+                $booking->mentee_confirmed_email_sent_at = now();
+                $booking->save();
+            }
 
             return true;
         } catch (\Throwable $e) {
@@ -209,5 +217,10 @@ class MentorBookingMailLogic
         } catch (\Throwable $e) {
             return 'IST (Asia/Kolkata)';
         }
+    }
+
+    private static function hasEmailTimestampColumn(string $column): bool
+    {
+        return Schema::hasColumn('mentor_bookings', $column);
     }
 }
