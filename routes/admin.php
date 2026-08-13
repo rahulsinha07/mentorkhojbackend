@@ -29,6 +29,8 @@ use App\Http\Controllers\Admin\MentorController;
 use App\Http\Controllers\Admin\MentorBookingController;
 use App\Http\Controllers\Admin\SeminarController;
 use App\Http\Controllers\Admin\SeminarBookingAdminController;
+use App\Http\Controllers\Admin\DemoBookingAdminController;
+use App\Http\Controllers\Admin\WhatsAppMessagingAdminController;
 use App\Http\Controllers\Admin\InternshipController;
 use App\Http\Controllers\Admin\NotificationController;
 use App\Http\Controllers\Admin\OfferController;
@@ -217,6 +219,18 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::delete('delete/{id}', [SeminarController::class, 'delete'])->name('delete');
             Route::get('registrations', [SeminarController::class, 'registrations'])->name('registrations');
             Route::get('bookings/{id}', [SeminarBookingAdminController::class, 'index'])->name('bookings');
+        });
+
+        Route::group(['prefix' => 'demo-bookings', 'as' => 'demo-bookings.', 'middleware' => ['module:promotion_management']], function () {
+            Route::get('/', [DemoBookingAdminController::class, 'index'])->name('index');
+            Route::get('{id}', [DemoBookingAdminController::class, 'show'])->name('show');
+            Route::put('{id}', [DemoBookingAdminController::class, 'update'])->name('update');
+            Route::delete('{id}', [DemoBookingAdminController::class, 'destroy'])->name('destroy');
+        });
+
+        Route::group(['prefix' => 'whatsapp-messaging', 'as' => 'whatsapp-messaging.', 'middleware' => ['module:promotion_management']], function () {
+            Route::get('/', [WhatsAppMessagingAdminController::class, 'edit'])->name('edit');
+            Route::put('/', [WhatsAppMessagingAdminController::class, 'update'])->name('update');
         });
 
         Route::group(['prefix' => 'internship', 'as' => 'internship.', 'middleware' => ['module:promotion_management']], function () {

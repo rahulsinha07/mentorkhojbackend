@@ -375,6 +375,26 @@
                                 </ul>
                             </li>
 
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/demo-bookings*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.demo-bookings.index')}}"
+                                   title="Demo Bookings"
+                                >
+                                    <i class="tio-calendar-note nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">Demo Bookings</span>
+                                </a>
+                            </li>
+
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/whatsapp-messaging*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.whatsapp-messaging.edit')}}"
+                                   title="WhatsApp Messaging"
+                                >
+                                    <i class="tio-messages nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">WhatsApp Messaging</span>
+                                </a>
+                            </li>
+
                             <li class="navbar-vertical-aside-has-menu {{Request::is('admin/internship*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link nav-link-toggle"
                                    href="javascript:"

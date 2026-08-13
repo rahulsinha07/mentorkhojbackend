@@ -65,7 +65,7 @@
                             </td>
                             <td class="text-center">
                                 <a href="{{ route('admin.seminar.registrations', ['seminar_id' => $seminar->id]) }}">
-                                    {{ $seminar->registrations_count }}
+                                    {{ $seminar->bookings_count }}
                                 </a>
                             </td>
                             <td class="text-center">

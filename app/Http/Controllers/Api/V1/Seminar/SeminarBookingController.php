@@ -45,22 +45,16 @@ class SeminarBookingController extends Controller
         } catch (QueryException $e) {
             return $this->jsonDbError($e);
         } catch (\RuntimeException $e) {
-            $booking = SeminarBooking::find($id);
-            if ($booking) {
-                $booking = $this->razorpay->markPaymentFailed($booking, $e->getMessage());
+            return $this->jsonPaymentError($id, $e);
+        } catch (\Throwable $e) {
+            Log::error('Seminar verify-payment failed', [
+                'booking_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
 
-                return response()->json([
-                    'ok' => false,
-                    'message' => $e->getMessage(),
-                    'booking_id' => $booking->id,
-                    'booking_ref' => $booking->booking_ref,
-                    'payment_status' => $booking->payment_status,
-                    'status' => $booking->status,
-                    'can_retry_payment' => true,
-                ], 400);
-            }
-
-            return response()->json(['ok' => false, 'message' => $e->getMessage()], 400);
+            return $this->jsonPaymentError($id, new \RuntimeException(
+                'Payment verification failed. Please contact support with your payment receipt.',
+            ));
         }
     }
 
@@ -300,6 +294,26 @@ class SeminarBookingController extends Controller
             'message' => 'Booking system is being updated. Please try again in a few minutes.',
             'code' => 'schema_not_ready',
         ], 503);
+    }
+
+    private function jsonPaymentError(int $id, \RuntimeException $e): JsonResponse
+    {
+        $booking = SeminarBooking::find($id);
+        if ($booking) {
+            $booking = $this->razorpay->markPaymentFailed($booking, $e->getMessage());
+
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+                'booking_id' => $booking->id,
+                'booking_ref' => $booking->booking_ref,
+                'payment_status' => $booking->payment_status,
+                'status' => $booking->status,
+                'can_retry_payment' => true,
+            ], 400);
+        }
+
+        return response()->json(['ok' => false, 'message' => $e->getMessage()], 400);
     }
 
     private function bookingResponse(SeminarBooking $booking, Seminar $seminar): array

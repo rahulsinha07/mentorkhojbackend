@@ -81,11 +81,25 @@ trait  Processor
 
     public function payment_response($payment_info, $payment_flag): Application|JsonResponse|Redirector|RedirectResponse|\Illuminate\Contracts\Foundation\Application
     {
-        $payment_info = PaymentRequest::find($payment_info->id);
-        $token_string = 'payment_method=' . $payment_info->payment_method . '&&attribute_id=' . $payment_info->attribute_id . '&&transaction_reference=' . $payment_info->transaction_id;
-        if (in_array($payment_info->payment_platform, ['web', 'app']) && $payment_info['external_redirect_link'] != null) {
-            return redirect($payment_info['external_redirect_link'] . '?flag=' . $payment_flag . '&&token=' . base64_encode($token_string));
+        if (!$payment_info?->id) {
+            return redirect()->route('payment-' . $payment_flag);
         }
-        return redirect()->route('payment-' . $payment_flag, ['token' => base64_encode($token_string)]);
+
+        $payment_info = PaymentRequest::find($payment_info->id);
+        if (!$payment_info) {
+            return redirect()->route('payment-' . $payment_flag);
+        }
+
+        $token_string = 'payment_method=' . $payment_info->payment_method . '&&attribute_id=' . $payment_info->attribute_id . '&&transaction_reference=' . $payment_info->transaction_id;
+        $encodedToken = base64_encode($token_string);
+
+        if (in_array($payment_info->payment_platform, ['web', 'app']) && $payment_info['external_redirect_link'] != null) {
+            $base = (string) $payment_info['external_redirect_link'];
+            $separator = str_contains($base, '?') ? '&' : '?';
+
+            return redirect($base . $separator . 'flag=' . rawurlencode($payment_flag) . '&token=' . rawurlencode($encodedToken));
+        }
+
+        return redirect()->route('payment-' . $payment_flag, ['token' => $encodedToken]);
     }
 }

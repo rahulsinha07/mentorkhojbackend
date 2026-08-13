@@ -7,6 +7,7 @@ use App\CentralLogics\MentorKhojRevalidateLogic;
 use App\CentralLogics\SeminarLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Seminar\Seminar;
+use App\Model\Seminar\SeminarBooking;
 use App\Model\Seminar\SeminarRegistration;
 use Brian2694\Toastr\Facades\Toastr;
 use Illuminate\Contracts\Foundation\Application;
@@ -26,7 +27,7 @@ class SeminarController extends Controller
         $search = $request->get('search');
         $queryParam = [];
 
-        $query = $this->seminar->withCount('registrations')->orderBy('sort_order')->latest('id');
+        $query = $this->seminar->withCount('bookings')->orderBy('sort_order')->latest('id');
         if ($request->filled('search') && $search) {
             $key = explode(' ', $search);
             $query->where(function ($q) use ($key) {
@@ -187,6 +188,7 @@ class SeminarController extends Controller
         }
 
         $slug = $seminar->slug;
+        $seminar->bookings()->delete();
         $seminar->registrations()->delete();
         $seminar->delete();
 
@@ -200,13 +202,30 @@ class SeminarController extends Controller
     {
         $search = $request->get('search');
         $seminarId = $request->get('seminar_id');
+        $paymentFilter = $request->get('payment_status');
         $queryParam = [];
 
-        $query = SeminarRegistration::with('seminar')->latest();
+        $query = SeminarBooking::with('seminar')->orderByDesc('created_at');
+
         if ($seminarId) {
             $query->where('seminar_id', $seminarId);
             $queryParam['seminar_id'] = $seminarId;
         }
+
+        if ($paymentFilter === 'paid') {
+            $query->where('payment_status', 'paid');
+            $queryParam['payment_status'] = $paymentFilter;
+        } elseif ($paymentFilter === 'pending') {
+            $query->where('payment_status', 'pending');
+            $queryParam['payment_status'] = $paymentFilter;
+        } elseif ($paymentFilter === 'failed') {
+            $query->where('payment_status', 'failed');
+            $queryParam['payment_status'] = $paymentFilter;
+        } elseif ($paymentFilter === 'free') {
+            $query->where('payment_status', 'not_required');
+            $queryParam['payment_status'] = $paymentFilter;
+        }
+
         if ($request->filled('search') && $search) {
             $key = explode(' ', $search);
             $query->where(function ($q) use ($key) {
@@ -214,15 +233,31 @@ class SeminarController extends Controller
                     $q->orWhere('name', 'like', "%{$value}%")
                         ->orWhere('email', 'like', "%{$value}%")
                         ->orWhere('phone', 'like', "%{$value}%")
-                        ->orWhere('registration_id', 'like', "%{$value}%");
+                        ->orWhere('booking_ref', 'like', "%{$value}%")
+                        ->orWhere('org', 'like', "%{$value}%");
                 }
             });
             $queryParam['search'] = $search;
         }
 
-        $registrations = $query->paginate(Helpers::getPagination())->appends($queryParam);
-        $seminars = $this->seminar->orderBy('title')->get(['id', 'title']);
+        $bookings = $query->paginate(Helpers::getPagination())->appends($queryParam);
+        $seminars = $this->seminar->orderBy('title')->get(['id', 'title', 'fee_amount']);
 
-        return view('admin-views.seminar.registrations', compact('registrations', 'search', 'seminarId', 'seminars'));
+        $legacyRegistrations = collect();
+        if ($seminarId && !$paymentFilter) {
+            $legacyRegistrations = SeminarRegistration::with('seminar')
+                ->where('seminar_id', $seminarId)
+                ->orderByDesc('created_at')
+                ->get();
+        }
+
+        return view('admin-views.seminar.registrations', compact(
+            'bookings',
+            'legacyRegistrations',
+            'search',
+            'seminarId',
+            'seminars',
+            'paymentFilter',
+        ));
     }
 }

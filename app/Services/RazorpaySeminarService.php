@@ -18,28 +18,78 @@ class RazorpaySeminarService
     public function credentials(): array
     {
         return Cache::remember('razor_pay_credentials', 300, function () {
-            $raw = \App\Model\BusinessSetting::where('key', 'razor_pay')->value('value');
-            $config = is_string($raw) ? json_decode($raw, true) : [];
+            $fromAddon = $this->credentialsFromAddonSettings();
+            if ($fromAddon['key_id'] !== '' && $fromAddon['key_secret'] !== '') {
+                return $fromAddon;
+            }
 
-            if (!is_array($config)) {
-                $config = [];
+            return $this->credentialsFromBusinessSettings();
+        });
+    }
+
+    /** Same source as legacy /payment-mobile RazorPay checkout (addon_settings). */
+    /** @return array{key_id: string, key_secret: string} */
+    private function credentialsFromAddonSettings(): array
+    {
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('addon_settings')) {
+                return ['key_id' => '', 'key_secret' => ''];
+            }
+
+            $config = \Illuminate\Support\Facades\DB::table('addon_settings')
+                ->where('key_name', 'razor_pay')
+                ->where('settings_type', 'payment_config')
+                ->first();
+
+            if (!$config) {
+                return ['key_id' => '', 'key_secret' => ''];
+            }
+
+            $valuesJson = ($config->mode ?? 'test') === 'live'
+                ? ($config->live_values ?? null)
+                : ($config->test_values ?? null);
+            $decoded = is_string($valuesJson) ? json_decode($valuesJson, true) : [];
+
+            if (!is_array($decoded)) {
+                return ['key_id' => '', 'key_secret' => ''];
             }
 
             return [
-                'key_id' => (string) (
-                    $config['razor_pay_api_key']
-                    ?? $config['api_key']
-                    ?? $config['key']
-                    ?? ''
-                ),
-                'key_secret' => (string) (
-                    $config['razor_pay_api_secret']
-                    ?? $config['api_secret']
-                    ?? $config['secret']
-                    ?? ''
-                ),
+                'key_id' => (string) ($decoded['api_key'] ?? ''),
+                'key_secret' => (string) ($decoded['api_secret'] ?? ''),
             ];
-        });
+        } catch (\Throwable) {
+            return ['key_id' => '', 'key_secret' => ''];
+        }
+    }
+
+    /** Legacy business_settings row (razor_key / razor_secret). */
+    /** @return array{key_id: string, key_secret: string} */
+    private function credentialsFromBusinessSettings(): array
+    {
+        $raw = \App\Model\BusinessSetting::where('key', 'razor_pay')->value('value');
+        $config = is_string($raw) ? json_decode($raw, true) : [];
+
+        if (!is_array($config)) {
+            $config = [];
+        }
+
+        return [
+            'key_id' => (string) (
+                $config['razor_key']
+                ?? $config['razor_pay_api_key']
+                ?? $config['api_key']
+                ?? $config['key']
+                ?? ''
+            ),
+            'key_secret' => (string) (
+                $config['razor_secret']
+                ?? $config['razor_pay_api_secret']
+                ?? $config['api_secret']
+                ?? $config['secret']
+                ?? ''
+            ),
+        ];
     }
 
     public function keyId(): string

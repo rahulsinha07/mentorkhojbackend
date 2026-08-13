@@ -219,5 +219,6 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
     require __DIR__.'/mentors.php';
     require __DIR__.'/seminars.php';
     require __DIR__.'/internships.php';
+    require __DIR__.'/demo-bookings.php';
 
 });

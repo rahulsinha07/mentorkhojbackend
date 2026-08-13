@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Redirector;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Razorpay\Api\Api;
 
@@ -74,27 +75,57 @@ class RazorPayController extends Controller
     public function payment(Request $request): JsonResponse|Redirector|RedirectResponse|Application
     {
         $input = $request->all();
-        $api = new Api(config('razor_config.api_key'), config('razor_config.api_secret'));
-        $payment = $api->payment->fetch($input['razorpay_payment_id']);
+        $paymentRow = $this->payment::where(['id' => $request['payment_id']])->first();
 
-        if (count($input) && !empty($input['razorpay_payment_id'])) {
-            $response = $api->payment->fetch($input['razorpay_payment_id'])->capture(array('amount' => $payment['amount']));
+        if (empty($input['razorpay_payment_id'])) {
+            if ($paymentRow && function_exists($paymentRow->failure_hook)) {
+                call_user_func($paymentRow->failure_hook, $paymentRow);
+            }
+
+            return $this->payment_response($paymentRow, 'fail');
+        }
+
+        try {
+            $apiKey = config('razor_config.api_key');
+            $apiSecret = config('razor_config.api_secret');
+            if (!$apiKey || !$apiSecret) {
+                throw new \RuntimeException('RazorPay is not configured.');
+            }
+
+            $api = new Api($apiKey, $apiSecret);
+            $payment = $api->payment->fetch($input['razorpay_payment_id']);
+            $status = (string) ($payment['status'] ?? '');
+
+            if ($status === 'authorized') {
+                $api->payment->fetch($input['razorpay_payment_id'])->capture(['amount' => $payment['amount']]);
+            } elseif ($status !== 'captured') {
+                throw new \RuntimeException('Payment was not completed (status: ' . $status . ').');
+            }
 
             $this->payment::where(['id' => $request['payment_id']])->update([
                 'payment_method' => 'razor_pay',
                 'is_paid' => 1,
                 'transaction_id' => $input['razorpay_payment_id'],
             ]);
+
             $data = $this->payment::where(['id' => $request['payment_id']])->first();
             if (isset($data) && function_exists($data->success_hook)) {
                 call_user_func($data->success_hook, $data);
             }
+
             return $this->payment_response($data, 'success');
+        } catch (\Throwable $e) {
+            Log::error('RazorPay payment callback failed', [
+                'payment_id' => $request['payment_id'],
+                'razorpay_payment_id' => $input['razorpay_payment_id'] ?? null,
+                'error' => $e->getMessage(),
+            ]);
+
+            if ($paymentRow && function_exists($paymentRow->failure_hook)) {
+                call_user_func($paymentRow->failure_hook, $paymentRow);
+            }
+
+            return $this->payment_response($paymentRow, 'fail');
         }
-        $payment_data = $this->payment::where(['id' => $request['payment_id']])->first();
-        if (isset($payment_data) && function_exists($payment_data->failure_hook)) {
-            call_user_func($payment_data->failure_hook, $payment_data);
-        }
-        return $this->payment_response($payment_data, 'fail');
     }
 }
