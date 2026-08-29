@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Mentor;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorEarningsLogic;
 use App\CentralLogics\MentorImageService;
+use App\CentralLogics\MentorLegacyProductLogic;
 use App\CentralLogics\MentorLogic;
 use App\CentralLogics\MentorWelcomeMailLogic;
 use App\Http\Controllers\Controller;
@@ -43,6 +44,7 @@ class MentorDashboardController extends Controller
             'checklist' => $checklist,
             'checklist_progress' => MentorLogic::checklistProgress($checklist),
             'earnings_summary' => MentorEarningsLogic::summary($mentor),
+            'demo_assignments' => \App\CentralLogics\SessionChatLogic::assignmentsForMentor($mentor),
         ]);
     }
 
@@ -198,6 +200,10 @@ class MentorDashboardController extends Controller
             $mentor->status = 'active';
         }
         $mentor->save();
+
+        if ($mentor->is_published) {
+            MentorLegacyProductLogic::ensureForMentor($mentor->fresh('enabledServices'));
+        }
 
         return response()->json([
             'message' => $mentor->is_published ? 'Page published' : 'Page unpublished',

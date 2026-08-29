@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorImageService;
+use App\CentralLogics\MentorLegacyProductLogic;
 use App\CentralLogics\MentorLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Category;
 use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorService;
+use App\Model\SessionChatMessage;
 use Brian2694\Toastr\Facades\Toastr;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
@@ -58,6 +60,12 @@ class MentorController extends Controller
             ? $this->category->where('parent_id', $categoryId)->orderBy('name')->get()
             : collect();
         $social = $mentor->social_links_array;
+        $sessionChatMessages = SessionChatMessage::query()
+            ->with(['mentee', 'mentor'])
+            ->where('mentor_id', $mentor->id)
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get();
 
         return view('admin-views.mentor.edit', compact(
             'mentor',
@@ -66,6 +74,7 @@ class MentorController extends Controller
             'subCategoryId',
             'subCategories',
             'social',
+            'sessionChatMessages',
         ));
     }
 
@@ -147,6 +156,12 @@ class MentorController extends Controller
 
         $this->syncServices($mentor, $request);
 
+        if ($mentor->is_published) {
+            MentorLegacyProductLogic::ensureForMentor($mentor->fresh('enabledServices'));
+        } elseif ($mentor->legacy_product_id) {
+            MentorLegacyProductLogic::syncProductFromServices($mentor->fresh('enabledServices'));
+        }
+
         Toastr::success(translate('mentor updated successfully'));
         return redirect()->route('admin.mentor.edit', $mentor->id);
     }
@@ -179,6 +194,10 @@ class MentorController extends Controller
             $mentor->status = 'active';
         }
         $mentor->save();
+
+        if ($mentor->is_published) {
+            MentorLegacyProductLogic::ensureForMentor($mentor->fresh('enabledServices'));
+        }
 
         Toastr::success(translate('mentor publish status updated!'));
         return back();
