@@ -68,6 +68,9 @@
                                 <a class="btn btn--info print--btn" target="_blank" href={{route('admin.orders.generate-invoice',[$order['id']])}}>
                                     <i class="tio-print mr-1"></i> {{translate('print')}} {{translate('invoice')}}
                                 </a>
+                                <a class="btn btn--primary" href="{{ route('admin.invoices.create', ['order_id' => $order['id']]) }}">
+                                    <i class="tio-receipt mr-1"></i> {{ translate('Tax Invoice') }}
+                                </a>
                             </div>
                             <div class="text-right mt-3 order-invoice-right-contents text-capitalize">
                                 <h6>

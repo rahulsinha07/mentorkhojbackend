@@ -27,6 +27,7 @@ use App\Http\Controllers\Admin\LocationSettingsController;
 use App\Http\Controllers\Admin\LoyaltyPointController;
 use App\Http\Controllers\Admin\MentorController;
 use App\Http\Controllers\Admin\MentorBookingController;
+use App\Http\Controllers\Admin\SessionChatAdminController;
 use App\Http\Controllers\Admin\SeminarController;
 use App\Http\Controllers\Admin\SeminarBookingAdminController;
 use App\Http\Controllers\Admin\DemoBookingAdminController;
@@ -41,6 +42,8 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ReviewsController;
 use App\Http\Controllers\Admin\SMSModuleController;
 use App\Http\Controllers\Admin\TimeSlotController;
+use App\Http\Controllers\Admin\InvoiceAdminController;
+use App\Http\Controllers\Admin\InvoiceSettingsController;
 
 Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
     Route::get('lang/{locale}', [LanguageController::class, 'lang'])->name('lang');
@@ -199,8 +202,12 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
 
         Route::group(['prefix' => 'mentor', 'as' => 'mentor.','middleware'=>['module:product_management']], function () {
             Route::get('list', [MentorController::class, 'list'])->name('list');
+            Route::get('session-messages', [SessionChatAdminController::class, 'index'])->name('session-messages');
             Route::get('bookings', [MentorBookingController::class, 'list'])->name('bookings.list');
             Route::get('bookings/{id}', [MentorBookingController::class, 'show'])->name('bookings.show');
+            Route::post('bookings/{id}/send-payment-email', [MentorBookingController::class, 'sendPaymentReminder'])->name('bookings.send-payment-email');
+            Route::post('bookings/{id}/complete', [MentorBookingController::class, 'complete'])->name('bookings.complete');
+            Route::post('bookings/{id}/reschedule', [MentorBookingController::class, 'reschedule'])->name('bookings.reschedule');
             Route::get('edit/{id}', [MentorController::class, 'edit'])->name('edit');
             Route::post('update/{id}', [MentorController::class, 'update'])->name('update');
             Route::get('status/{id}/{status}', [MentorController::class, 'status'])->name('status');
@@ -225,6 +232,9 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('/', [DemoBookingAdminController::class, 'index'])->name('index');
             Route::get('{id}', [DemoBookingAdminController::class, 'show'])->name('show');
             Route::put('{id}', [DemoBookingAdminController::class, 'update'])->name('update');
+            Route::post('{id}/mentors', [DemoBookingAdminController::class, 'storeMentors'])->name('mentors.store');
+            Route::delete('{id}/mentors/{mentorId}', [DemoBookingAdminController::class, 'destroyMentor'])->name('mentors.destroy');
+            Route::put('{id}/paid', [DemoBookingAdminController::class, 'updatePaid'])->name('paid.update');
             Route::delete('{id}', [DemoBookingAdminController::class, 'destroy'])->name('destroy');
         });
 
@@ -483,6 +493,11 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::delete('delete/{id}', [CustomerController::class, 'delete'])->name('delete');
             Route::get('status/{id}/{status}', [CustomerController::class, 'status'])->name('status');
             Route::post('reset-password/{id}', [CustomerController::class, 'resetPassword'])->name('reset-password');
+            Route::post('bookings/{id}/send-payment-email', [CustomerController::class, 'sendPaymentReminder'])->name('send-payment-email');
+            Route::post('{user_id}/session-credits', [CustomerController::class, 'storeSessionCredits'])->name('session-credits.store');
+            Route::post('{user_id}/session-credits/schedule', [CustomerController::class, 'scheduleFromCredits'])->name('session-credits.schedule');
+            Route::post('bookings/{id}/complete', [CustomerController::class, 'completeBooking'])->name('bookings.complete');
+            Route::post('bookings/{id}/reschedule', [CustomerController::class, 'rescheduleBooking'])->name('bookings.reschedule');
             Route::get('export', [CustomerController::class, 'exportCustomer'])->name('export');
 
             Route::get('select-list', [CustomerWalletController::class, 'getCustomers'])->name('select-list');
@@ -527,6 +542,31 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
 
         Route::get('verify-offline-payment/quick-view-details', [OfflinePaymentMethodController::class, 'quickViewDetails'])->name('offline-modal-view');
         Route::get('verify-offline-payment/{status}', [OfflinePaymentMethodController::class, 'offlinePaymentList'])->name('verify-offline-payment');
+
+        Route::group(['prefix' => 'invoices', 'as' => 'invoices.', 'middleware' => ['module:invoice_management']], function () {
+            Route::get('/', [InvoiceAdminController::class, 'dashboard'])->name('dashboard');
+            Route::get('list', [InvoiceAdminController::class, 'index'])->name('list');
+            Route::get('create', [InvoiceAdminController::class, 'create'])->name('create');
+            Route::post('/', [InvoiceAdminController::class, 'store'])->name('store');
+            Route::post('calculate', [InvoiceAdminController::class, 'calculate'])->name('calculate');
+            Route::get('search-users', [InvoiceAdminController::class, 'searchUsers'])->name('search-users');
+            Route::get('prefill/order/{orderId}', [InvoiceAdminController::class, 'prefillOrder'])->name('prefill.order');
+            Route::get('prefill/booking/{bookingId}', [InvoiceAdminController::class, 'prefillBooking'])->name('prefill.booking');
+            Route::get('{id}', [InvoiceAdminController::class, 'show'])->name('show');
+            Route::get('{id}/edit', [InvoiceAdminController::class, 'edit'])->name('edit');
+            Route::put('{id}', [InvoiceAdminController::class, 'update'])->name('update');
+            Route::post('{id}/duplicate', [InvoiceAdminController::class, 'duplicate'])->name('duplicate');
+            Route::post('{id}/cancel', [InvoiceAdminController::class, 'cancel'])->name('cancel');
+            Route::delete('{id}', [InvoiceAdminController::class, 'destroy'])->name('destroy');
+            Route::get('{id}/pdf', [InvoiceAdminController::class, 'pdf'])->name('pdf');
+            Route::get('{id}/print', [InvoiceAdminController::class, 'print'])->name('print');
+            Route::post('{id}/send', [InvoiceAdminController::class, 'send'])->name('send');
+        });
+
+        Route::group(['prefix' => 'invoice-settings', 'as' => 'invoice-settings.', 'middleware' => ['module:invoice_management']], function () {
+            Route::get('/', [InvoiceSettingsController::class, 'edit'])->name('edit');
+            Route::put('/', [InvoiceSettingsController::class, 'update'])->name('update');
+        });
 
     });
 });

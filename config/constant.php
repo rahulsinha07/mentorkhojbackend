@@ -18,6 +18,7 @@ const MANAGEMENT_SECTION = [
     'user_management' => 'user_management',
     'system_management' => 'system_management',
     'addon_management' => 'addon_management',
+    'invoice_management' => 'invoice_management',
 ];
 
 
