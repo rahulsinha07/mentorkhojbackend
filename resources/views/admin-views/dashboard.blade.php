@@ -46,7 +46,7 @@
                                     <h5 class="card-title mb-2">
                                         <img src="{{asset('/public/assets/admin/img/order-statistics.png')}}" alt=""
                                              class="card-icon">
-                                        <span>{{translate('order_statistics')}}</span>
+                                        <span>{{ translate('Booking statistics') }}</span>
                                     </h5>
                                     <div class="mb-2">
                                         <div class="d-flex flex-wrap statistics-btn-grp">
@@ -76,35 +76,29 @@
                         <div class="card h-100 bg-white">
                             <div class="card-header border-0 order-header-shadow">
                                 <h5 class="card-title">
-                                    <span>{{translate('order_status_statistics')}}</span>
+                                    <span>{{ translate('Booking status statistics') }}</span>
                                 </h5>
                             </div>
                             <div class="card-body">
                                 <div class="position-relative pie-chart">
                                     <div id="dognut-pie"></div>
                                     <div class="total--orders">
-                                        <h3>{{$data['pending_count'] + $data['ongoing_count'] + $data['delivered_count']+ $data['canceled_count']+ $data['returned_count']+ $data['failed_count']}} </h3>
-                                        <span>{{ translate('orders') }}</span>
+                                        <h3>{{ $data['requested_count'] + $data['confirmed_count'] + $data['completed_count'] + $data['cancelled_count'] }}</h3>
+                                        <span>{{ translate('Bookings') }}</span>
                                     </div>
                                 </div>
                                 <div class="apex-legends">
                                     <div class="before-bg-E5F5F1">
-                                        <span>{{ translate('pending') }} ({{$data['pending_count']}})</span>
+                                        <span>{{ translate('Requested') }} ({{ $data['requested_count'] }})</span>
                                     </div>
                                     <div class="before-bg-036BB7">
-                                        <span>{{ translate('ongoing') }} ({{$data['ongoing_count']}})</span>
+                                        <span>{{ translate('Confirmed') }} ({{ $data['confirmed_count'] }})</span>
                                     </div>
                                     <div class="before-bg-107980">
-                                        <span>{{ translate('delivered') }} ({{$data['delivered_count']}})</span>
+                                        <span>{{ translate('Completed') }} ({{ $data['completed_count'] }})</span>
                                     </div>
                                     <div class="before-bg-0e0def">
-                                        <span>{{ translate('canceled') }} ({{$data['canceled_count']}})</span>
-                                    </div>
-                                    <div class="before-bg-ff00ff">
-                                        <span>{{ translate('returned') }} ({{$data['returned_count']}})</span>
-                                    </div>
-                                    <div class="before-bg-f51414">
-                                        <span>{{ translate('failed') }} ({{$data['failed_count']}})</span>
+                                        <span>{{ translate('Cancelled') }} ({{ $data['cancelled_count'] }})</span>
                                     </div>
                                 </div>
                             </div>
@@ -148,40 +142,44 @@
                         <div class="card h-100 bg-white">
                             <div class="card-header border-0 order-header-shadow">
                                 <h5 class="card-title d-flex justify-content-between flex-grow-1">
-                                    <span>{{translate('recent_orders')}}</span>
-                                    <a href="{{route('admin.orders.list',['all'])}}"
-                                       class="fz-12px font-medium text-006AE5">{{translate('view_all')}}</a>
+                                    <span>{{ translate('Recent Mentor Bookings') }}</span>
+                                    <a href="{{ route('admin.mentor.bookings.list') }}"
+                                       class="fz-12px font-medium text-006AE5">{{ translate('view_all') }}</a>
                                 </h5>
                             </div>
                             <div class="card-body p-10px">
                                 <ul class="recent--orders">
-                                    @foreach($data['recent_orders'] as $order)
+                                    @forelse($data['recent_bookings'] as $booking)
                                         <li>
-                                            <a href="{{route('admin.orders.details', ['id'=>$order['id']])}}">
+                                            <a href="{{ route('admin.mentor.bookings.show', $booking->id) }}">
                                                 <div>
-                                                    <h6>{{translate('order')}} #{{$order['id']}}</h6>
-                                                    <span
-                                                        class="text-uppercase">{{date('m-d-Y  h:i A', strtotime($order['created_at']))}}</span>
+                                                    <h6>
+                                                        {{ trim(($booking->mentee?->f_name ?? '') . ' ' . ($booking->mentee?->l_name ?? '')) ?: ('#' . $booking->id) }}
+                                                        @if($booking->mentor?->display_name)
+                                                            <small class="text-muted">· {{ $booking->mentor->display_name }}</small>
+                                                        @endif
+                                                    </h6>
+                                                    <span class="text-uppercase">
+                                                        {{ $booking->service?->title ?? translate('Session') }}
+                                                        · {{ date('m-d-Y  h:i A', strtotime($booking->created_at)) }}
+                                                    </span>
                                                 </div>
-                                                @if($order['order_status'] == 'pending')
-                                                    <span
-                                                        class="status text-0661cb">{{translate($order['order_status'])}}</span>
-                                                @elseif($order['order_status'] == 'delivered')
-                                                    <span
-                                                        class="status text-56b98f">{{translate($order['order_status'])}}</span>
-                                                @elseif($order['order_status'] == 'confirmed' || $order['order_status'] == 'processing' || $order['order_status'] == 'out_for_delivery')
-                                                    <span
-                                                        class="status text-F5A200">{{$order['order_status'] == 'processing' ? translate('packaging') : translate($order['order_status'])}}</span>
-                                                @elseif($order['order_status'] == 'canceled' || $order['order_status'] == 'failed')
-                                                    <span
-                                                        class="status text-F5A200">{{translate($order['order_status'])}}</span>
+                                                @if($booking->status === 'requested')
+                                                    <span class="status text-0661cb">{{ translate($booking->status) }}</span>
+                                                @elseif($booking->status === 'completed')
+                                                    <span class="status text-56b98f">{{ translate($booking->status) }}</span>
+                                                @elseif($booking->status === 'confirmed')
+                                                    <span class="status text-F5A200">{{ translate($booking->status) }}</span>
+                                                @elseif(in_array($booking->status, ['cancelled', 'refunded'], true))
+                                                    <span class="status text-F5A200">{{ translate($booking->status) }}</span>
                                                 @else
-                                                    <span
-                                                        class="status text-0661CB">{{translate($order['order_status'])}}</span>
+                                                    <span class="status text-0661CB">{{ translate($booking->status) }}</span>
                                                 @endif
                                             </a>
                                         </li>
-                                    @endforeach
+                                    @empty
+                                        <li class="text-muted p-3">{{ translate('No mentor bookings yet') }}</li>
+                                    @endforelse
                                 </ul>
                             </div>
                         </div>
@@ -189,19 +187,19 @@
 
                     <div class="col-lg-4">
                         <div class="card h-100">
-                            @include('admin-views.partials._top-selling-products',['top_sell'=>$data['top_sell']])
+                            @include('admin-views.partials._top-selling-products',['top_mentors'=>$data['top_mentors']])
                         </div>
                     </div>
 
                     <div class="col-lg-4">
                         <div class="card h-100">
-                            @include('admin-views.partials._most-rated-products',['most_rated_products'=>$data['most_rated_products']])
+                            @include('admin-views.partials._most-rated-products',['recent_demos'=>$data['recent_demos']])
                         </div>
                     </div>
 
                     <div class="col-lg-4">
                         <div class="card h-100">
-                            @include('admin-views.partials._top-customer',['top_customer'=>$data['top_customer']])
+                            @include('admin-views.partials._top-customer',['top_mentees'=>$data['top_mentees']])
                         </div>
                     </div>
                 </div>
@@ -237,11 +235,18 @@
 
                     var options = {
                         series: [{
-                            name: "{{ translate('Orders') }}",
+                            name: "{{ translate('Mentor Bookings') }}",
                             data: [
                                 {{$orderStatisticsChart[1]}}, {{$orderStatisticsChart[2]}}, {{$orderStatisticsChart[3]}}, {{$orderStatisticsChart[4]}},
                                 {{$orderStatisticsChart[5]}}, {{$orderStatisticsChart[6]}}, {{$orderStatisticsChart[7]}}, {{$orderStatisticsChart[8]}},
                                 {{$orderStatisticsChart[9]}}, {{$orderStatisticsChart[10]}}, {{$orderStatisticsChart[11]}}, {{$orderStatisticsChart[12]}}
+                            ],
+                        }, {
+                            name: "{{ translate('Demo Bookings') }}",
+                            data: [
+                                {{$demoStatisticsChart[1]}}, {{$demoStatisticsChart[2]}}, {{$demoStatisticsChart[3]}}, {{$demoStatisticsChart[4]}},
+                                {{$demoStatisticsChart[5]}}, {{$demoStatisticsChart[6]}}, {{$demoStatisticsChart[7]}}, {{$demoStatisticsChart[8]}},
+                                {{$demoStatisticsChart[9]}}, {{$demoStatisticsChart[10]}}, {{$demoStatisticsChart[11]}}, {{$demoStatisticsChart[12]}}
                             ],
                         }],
                         chart: {
@@ -290,16 +295,16 @@
                     chart.render();
 
                     var options = {
-                        series: [{{$data['ongoing_count']}}, {{$data['delivered_count']}}, {{$data['pending_count']}}, {{$data['canceled']}}, {{$data['returned']}}, {{$data['failed']}}],
+                        series: [{{ $data['requested_count'] }}, {{ $data['confirmed_count'] }}, {{ $data['completed_count'] }}, {{ $data['cancelled_count'] }}],
                         chart: {
                             width: 320,
                             type: 'donut',
                         },
-                        labels: ['{{ translate('ongoing') }}', '{{ translate('delivered') }}', '{{ translate('pending') }}', '{{translate('canceled')}}', '{{translate('returned')}}', '{{translate('failed')}}'],
+                        labels: ['{{ translate('Requested') }}', '{{ translate('Confirmed') }}', '{{ translate('Completed') }}', '{{ translate('Cancelled') }}'],
                         dataLabels: {
                             enabled: false,
                             style: {
-                                colors: ['#036BB7', '#107980', '#6a5acd', '#ff00ff', '#0e0def', '#f51414']
+                                colors: ['#036BB7', '#107980', '#6a5acd', '#0e0def']
                             }
                         },
                         responsive: [{
@@ -310,9 +315,9 @@
                                 },
                             }
                         }],
-                        colors: ['#036BB7', '#107980', '#6a5acd', '#0e0def', '#ff00ff', '#f51414'],
+                        colors: ['#6a5acd', '#036BB7', '#107980', '#0e0def'],
                         fill: {
-                            colors: ['#036BB7', '#107980', '#6a5acd', '#0e0def', '#ff00ff', '#f51414']
+                            colors: ['#6a5acd', '#036BB7', '#107980', '#0e0def']
                         },
                         legend: {
                             show: false
@@ -419,7 +424,6 @@
                                 $('#loading').show()
                             },
                             success: function (response_data) {
-                                console.log(response_data);
                                 document.getElementById("line-chart-1").remove();
                                 let graph = document.createElement('div');
                                 graph.setAttribute("id", "line-chart-1");
@@ -427,8 +431,11 @@
 
                                 var options = {
                                     series: [{
-                                        name: "{{ translate('Orders') }}",
+                                        name: "{{ translate('Mentor Bookings') }}",
                                         data: response_data.orders,
+                                    }, {
+                                        name: "{{ translate('Demo Bookings') }}",
+                                        data: response_data.demos,
                                     }],
                                     chart: {
                                         height: 316,

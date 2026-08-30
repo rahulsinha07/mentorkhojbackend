@@ -295,6 +295,7 @@
                 </div>
             </div>
         </form>
+        @include('admin-views.partials._session-chat-thread')
     </div>
 @endsection
 

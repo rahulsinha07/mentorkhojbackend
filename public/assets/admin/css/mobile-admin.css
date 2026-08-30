@@ -1,11 +1,46 @@
 /**
  * Admin panel mobile enhancements
+ * Cache-bust via ?v= on layout link when changing this file.
  */
 
 /* Prevent horizontal page scroll on small screens */
 html,
 body {
   overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Safe areas (notched phones) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* WhatsApp action — large enough to tap on phones */
+.admin-wa-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0.35rem 0.65rem !important;
+  line-height: 1;
+  border-radius: 0.5rem;
+  -webkit-tap-highlight-color: rgba(1, 104, 75, 0.2);
+  touch-action: manipulation;
+}
+
+.admin-wa-btn .tio-whatsapp {
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.admin-wa-btn__label {
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 /* ------------------------------------------------------------------ */
@@ -15,21 +50,59 @@ body {
   .navbar-vertical-fixed.navbar-vertical-aside {
     width: min(16.25rem, 88vw);
     max-width: 88vw;
+    z-index: 101;
   }
 
-  .navbar-vertical-aside-mobile-overlay {
+  /*
+   * CRITICAL: do NOT force the mobile overlay to 100%x100% while the drawer
+   * is closed. An opacity:0 full-screen overlay still steals every tap and
+   * the SideNav toggle then opens the left panel instead of following links.
+   */
+  .navbar-vertical-aside-mobile-overlay,
+  .navbar-vertical-aside-sub-menu-overlay {
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    opacity: 0 !important;
+    z-index: -1 !important;
+  }
+
+  body.has-navbar-vertical-aside:not(.navbar-vertical-aside-closed-mode)
+    .navbar-vertical-aside-mobile-overlay {
+    pointer-events: auto !important;
     width: 100% !important;
     height: 100% !important;
-    min-width: 0 !important;
-    min-height: 0 !important;
+    opacity: 1 !important;
+    z-index: 99 !important;
+  }
+
+  /* Closed drawer must not intercept taps over the page */
+  body.navbar-vertical-aside-closed-mode .navbar-vertical-aside {
+    pointer-events: none !important;
+  }
+
+  body:not(.navbar-vertical-aside-closed-mode) .navbar-vertical-aside {
+    pointer-events: auto !important;
   }
 
   body:not(.navbar-vertical-aside-closed-mode).navbar-vertical-aside-transition-on {
     overflow: hidden;
   }
 
+  /* Drawer layout: never keep desktop sidebar offset on phones/tablets */
+  .has-navbar-vertical-aside .main,
+  .has-navbar-vertical-aside .footer,
+  .has-navbar-vertical-aside .navbar:not(.navbar-vertical) {
+    margin-left: 0 !important;
+  }
+
+  .has-navbar-vertical-aside.navbar-vertical-aside-closed-mode .main {
+    padding-left: 0;
+  }
+
   .navbar-vertical-aside .navbar-vertical-content {
     max-height: calc(100vh - 4.5rem);
+    max-height: calc(100dvh - 4.5rem);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -46,15 +119,12 @@ body {
     background: inherit;
     padding-bottom: 0.5rem;
   }
-}
 
-/* ------------------------------------------------------------------ */
-/* Header                                                             */
-/* ------------------------------------------------------------------ */
-@media (max-width: 1199.98px) {
+  /* Fixed top bar stays usable */
   .navbar-fixed.navbar-container {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
+    z-index: 100;
   }
 
   .admin-mobile-menu-toggle {
@@ -68,6 +138,10 @@ body {
     background: transparent;
     color: #334257;
     border-radius: 0.5rem;
+    -webkit-tap-highlight-color: transparent;
+    pointer-events: auto;
+    position: relative;
+    z-index: 102;
   }
 
   .admin-mobile-menu-toggle:focus {
@@ -79,6 +153,9 @@ body {
     font-size: 1.5rem;
     line-height: 1;
   }
+
+  /* Do not raise .main above the open-drawer overlay — pointer-events on the
+     overlay (above) is enough to stop closed-state tap stealing. */
 }
 
 @media (max-width: 575.98px) {
@@ -114,13 +191,18 @@ body {
 /* ------------------------------------------------------------------ */
 @media (max-width: 767.98px) {
   .main {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
   }
 
   .content.container-fluid {
     padding-left: 0;
     padding-right: 0;
+    width: 100%;
+    max-width: 100%;
   }
 
   .page-header {
@@ -173,16 +255,108 @@ body {
 
   .table-responsive {
     -webkit-overflow-scrolling: touch;
+    overflow-x: auto;
+    margin-left: -0.25rem;
+    margin-right: -0.25rem;
+    padding-bottom: 0.25rem;
+  }
+
+  .table-responsive::after {
+    content: "Swipe sideways for more →";
+    display: block;
+    font-size: 0.7rem;
+    color: #8c98a4;
+    padding: 0.35rem 0.75rem 0;
   }
 
   .min--200,
   .min--250 {
     min-width: auto !important;
   }
+
+  /* Charts / widgets shouldn't blow past the viewport */
+  .apexcharts-canvas,
+  .apexcharts-svg,
+  #line-chart-1,
+  #dognut-pie {
+    max-width: 100% !important;
+  }
+
+  .card {
+    overflow: hidden;
+  }
+}
+
+/* Demo bookings — mobile card list */
+.admin-mobile-booking-list {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  .admin-desktop-booking-table {
+    display: none !important;
+  }
+
+  .admin-mobile-booking-list {
+    display: block;
+    padding: 0.75rem 1rem 1rem;
+  }
+
+  .admin-mobile-booking-card {
+    border: 1px solid #e7eaf3;
+    border-radius: 0.75rem;
+    padding: 0.9rem 1rem;
+    margin-bottom: 0.75rem;
+    background: #fff;
+  }
+
+  .admin-mobile-booking-card__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .admin-mobile-booking-card__name {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #1e2022;
+    margin: 0;
+    word-break: break-word;
+  }
+
+  .admin-mobile-booking-card__meta {
+    font-size: 0.8rem;
+    color: #677788;
+    margin-bottom: 0.65rem;
+  }
+
+  .admin-mobile-booking-card__meta div {
+    margin-bottom: 0.15rem;
+  }
+
+  .admin-mobile-booking-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .admin-mobile-booking-card__actions .btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .admin-mobile-booking-card .admin-wa-btn {
+    flex: 1 1 auto;
+    min-width: 7.5rem;
+  }
 }
 
 /* ------------------------------------------------------------------ */
-/* Tabs & filters (Third Party settings, etc.)                        */
+/* Tabs & filters                                                     */
 /* ------------------------------------------------------------------ */
 @media (max-width: 991.98px) {
   .nav-tabs.border-0.mb-3,
@@ -215,7 +389,7 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Forms, toggles, modals                                             */
+/* Forms, toggles, modals, login                                      */
 /* ------------------------------------------------------------------ */
 @media (max-width: 767.98px) {
   .form-control,
@@ -249,6 +423,36 @@ body {
   .row.gx-2 > [class*="col-"],
   .row.gx-3 > [class*="col-"] {
     margin-bottom: 0.75rem;
+  }
+
+  .auth-wrapper-right {
+    padding: 1rem 1.1rem !important;
+    max-width: 100% !important;
+    min-height: 100vh;
+    min-height: 100dvh;
+    box-sizing: border-box;
+  }
+
+  .auth-wrapper-right .auth-wrapper-form {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  .auth-wrapper-right .auth-header .title {
+    font-size: 1.6rem !important;
+  }
+
+  .auth-wrapper-right .form-control,
+  .auth-wrapper-right .form-control-lg,
+  .auth-wrapper-right .btn-block {
+    min-height: 48px !important;
+    font-size: 16px !important; /* avoid iOS zoom on focus */
+  }
+
+  .auth-wrapper-right img[src*="captcha"],
+  .auth-wrapper-right .input-icons img {
+    max-width: 100%;
+    height: auto;
   }
 }
 

@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, shrink-to-fit=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>{{ translate('Admin') }} | {{ translate('Login') }}</title>
 
     @php($icon = Helpers::get_business_settings('fav_icon'))
@@ -15,6 +16,7 @@
     <link rel="stylesheet" href="{{asset('public/assets/admin/css/theme.minc619.css?v=1.0')}}">
     <link rel="stylesheet" href="{{asset('public/assets/admin/css/style.css')}}">
     <link rel="stylesheet" href="{{asset('public/assets/admin/css/toastr.css')}}">
+    <link rel="stylesheet" href="{{asset('public/assets/admin/css/mobile-admin.css')}}?v=20260826b">
 </head>
 
 <body>

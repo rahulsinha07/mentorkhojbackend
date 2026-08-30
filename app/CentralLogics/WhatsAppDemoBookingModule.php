@@ -241,4 +241,87 @@ class WhatsAppDemoBookingModule
             return ['status' => 'error', 'template' => $template, 'message' => $e->getMessage()];
         }
     }
+
+    /**
+     * Session time confirmed — no mentor personal details in the template.
+     *
+     * @return array{status:string,template:string,message?:string}
+     */
+    public static function sendSessionConfirmed(
+        string $phone,
+        string $firstName,
+        string $date,
+        string $time
+    ): array {
+        $cfg = self::messagingConfig();
+        $template = $cfg['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed';
+
+        if (!$cfg['enabled']) {
+            return [
+                'status' => 'not_configured',
+                'template' => $template,
+                'message' => 'WhatsApp messaging not enabled',
+            ];
+        }
+
+        $to = preg_replace('/[^0-9]/', '', $phone) ?? '';
+        if ($to === '') {
+            return ['status' => 'error', 'template' => $template, 'message' => 'Invalid phone'];
+        }
+        if (strlen($to) === 10) {
+            $to = '91' . $to;
+        }
+
+        $version = $cfg['api_version'];
+        if ($version && !str_starts_with($version, 'v')) {
+            $version = 'v' . $version;
+        }
+
+        $components = [
+            [
+                'type' => 'body',
+                'parameters' => [
+                    ['type' => 'text', 'text' => self::sanitize($firstName !== '' ? $firstName : 'there', 40)],
+                    ['type' => 'text', 'text' => self::sanitize($date, 40)],
+                    ['type' => 'text', 'text' => self::sanitize($time, 40)],
+                    ['type' => 'text', 'text' => '+91 7366939888 / +91 9102695888'],
+                ],
+            ],
+        ];
+
+        try {
+            $response = Http::withToken($cfg['access_token'])
+                ->timeout(20)
+                ->post("https://graph.facebook.com/{$version}/{$cfg['phone_number_id']}/messages", [
+                    'messaging_product' => 'whatsapp',
+                    'to' => $to,
+                    'type' => 'template',
+                    'template' => [
+                        'name' => $template,
+                        'language' => ['code' => $cfg['template_language']],
+                        'components' => $components,
+                    ],
+                ]);
+
+            if ($response->successful()) {
+                return ['status' => 'success', 'template' => $template];
+            }
+
+            Log::error('WhatsApp session confirmed send failed', [
+                'template' => $template,
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            return [
+                'status' => 'error',
+                'template' => $template,
+                'message' => mb_substr($response->body(), 0, 200),
+            ];
+        } catch (\Throwable $e) {
+            Log::error('WhatsApp session confirmed exception', ['message' => $e->getMessage()]);
+
+            return ['status' => 'error', 'template' => $template, 'message' => $e->getMessage()];
+        }
+    }
 }

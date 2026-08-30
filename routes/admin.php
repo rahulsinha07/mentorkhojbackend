@@ -552,6 +552,7 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('search-users', [InvoiceAdminController::class, 'searchUsers'])->name('search-users');
             Route::get('prefill/order/{orderId}', [InvoiceAdminController::class, 'prefillOrder'])->name('prefill.order');
             Route::get('prefill/booking/{bookingId}', [InvoiceAdminController::class, 'prefillBooking'])->name('prefill.booking');
+            Route::get('prefill/demo/{demoRef}', [InvoiceAdminController::class, 'prefillDemoBooking'])->name('prefill.demo')->where('demoRef', '.+');
             Route::get('{id}', [InvoiceAdminController::class, 'show'])->name('show');
             Route::get('{id}/edit', [InvoiceAdminController::class, 'edit'])->name('edit');
             Route::put('{id}', [InvoiceAdminController::class, 'update'])->name('update');

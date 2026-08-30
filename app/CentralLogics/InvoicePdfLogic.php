@@ -11,7 +11,7 @@ use Mpdf\Mpdf;
 class InvoicePdfLogic
 {
     /** @return array<string, mixed> */
-    public static function viewData(Invoice $invoice, ?InvoiceSetting $settings = null): array
+    public static function viewData(Invoice $invoice, ?InvoiceSetting $settings = null, bool $maskCustomerPii = false): array
     {
         $settings = $settings ?? InvoiceSetting::instance();
         $company = InvoiceCompanyProfile::mergedWithSettings($settings);
@@ -27,17 +27,20 @@ class InvoicePdfLogic
                 (float) $invoice->total_amount,
                 $invoice->currency === 'INR' ? 'Indian Rupees' : $invoice->currency
             ),
+            'maskCustomerPii' => $maskCustomerPii,
+            'customer_display' => InvoicePrivacyLogic::customerDisplayForInvoice($invoice, $maskCustomerPii),
+            'mentorkhoj_url' => rtrim((string) ($company['website'] ?? 'https://www.mentorkhoj.com/'), '/'),
         ];
     }
 
-    public static function renderHtml(Invoice $invoice): string
+    public static function renderHtml(Invoice $invoice, bool $maskCustomerPii = false): string
     {
-        return View::make('admin-views.invoices.pdf.invoice-a4', static::viewData($invoice))->render();
+        return View::make('admin-views.invoices.pdf.invoice-a4', static::viewData($invoice, null, $maskCustomerPii))->render();
     }
 
     public static function download(Invoice $invoice): Response
     {
-        $html = static::renderHtml($invoice);
+        $html = static::renderHtml($invoice, true);
         $mpdf = static::createMpdf();
         $mpdf->WriteHTML($html);
 
@@ -51,7 +54,7 @@ class InvoicePdfLogic
 
     public static function inline(Invoice $invoice): Response
     {
-        $html = static::renderHtml($invoice);
+        $html = static::renderHtml($invoice, false);
         $mpdf = static::createMpdf();
         $mpdf->WriteHTML($html);
 
@@ -66,7 +69,7 @@ class InvoicePdfLogic
     /** @return string Raw PDF bytes for email attachment */
     public static function rawBytes(Invoice $invoice): string
     {
-        $html = static::renderHtml($invoice);
+        $html = static::renderHtml($invoice, false);
         $mpdf = static::createMpdf();
         $mpdf->WriteHTML($html);
 

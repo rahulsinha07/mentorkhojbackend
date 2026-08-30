@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Mail\DemoBooked;
 use App\Mail\DemoBookedAdminAlert;
+use App\Mail\DemoMentorAssigned;
+use App\CentralLogics\DemoBookingClaimLogic;
 use App\Model\DemoBooking;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -76,5 +78,31 @@ class DemoBookingMailService
         }
 
         return $result;
+    }
+
+    /**
+     * @return string success|no_email|error
+     */
+    public function sendMentorAssignedEmail(DemoBooking $booking): string
+    {
+        $email = trim((string) $booking->email);
+        if ($email === '') {
+            return 'no_email';
+        }
+
+        try {
+            $hasAccount = DemoBookingClaimLogic::studentHasAccount($booking);
+            $cta = DemoBookingClaimLogic::profileCtaUrl($booking);
+            Mail::to($email)->send(new DemoMentorAssigned($booking, $cta, $hasAccount));
+
+            return 'success';
+        } catch (\Throwable $e) {
+            Log::error('Demo mentor assigned email failed', [
+                'booking_id' => $booking->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 'error';
+        }
     }
 }

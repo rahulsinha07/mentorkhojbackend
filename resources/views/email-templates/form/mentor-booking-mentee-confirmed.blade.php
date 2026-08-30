@@ -10,7 +10,8 @@
 
 <h1 style="margin:0 0 8px;font-size:26px;font-weight:800;color:#0f172a;letter-spacing:-0.02em;line-height:1.2;">Your session is confirmed!</h1>
 <p style="margin:0 0 20px;font-size:15px;line-height:1.65;color:#475569;">
-    Hi {{ $mentee_first_name }}, great news — <strong>{{ $mentor_first_name }}</strong> has confirmed your mentorship session on MentorKhoj. You're all set!
+    Hi {{ $mentee_first_name }}, <strong>{{ $mentor_first_name }}</strong> has confirmed your session time on MentorKhoj.
+    Join only through MentorKhoj — we do not share mentor phone or email.
 </p>
 
 @include('email-templates.form._mentor-session-details')
@@ -48,7 +49,12 @@
 
 <p style="margin:0 0 8px;font-size:14px;line-height:1.65;color:#475569;">
     Need help before your session? Email
-    <a href="mailto:{{ $brand['admin_email'] ?? $support_email }}" style="color:#006161;text-decoration:none;font-weight:600;">{{ $brand['admin_email'] ?? $support_email }}</a>.
+    <a href="mailto:{{ $brand['admin_email'] ?? $support_email }}" style="color:#006161;text-decoration:none;font-weight:600;">{{ $brand['admin_email'] ?? $support_email }}</a>
+    or WhatsApp MentorKhoj:
+    <strong>{{ $support_phone_primary ?? '+91 73669 39888' }}</strong>
+    and
+    <strong>{{ $support_phone_secondary ?? '+91 91026 95888' }}</strong>.
+    Do not exchange personal phone numbers or emails with your mentor.
 </p>
 <p style="margin:0;font-size:14px;line-height:1.65;color:#475569;">
     You've got this — we're excited for you! 🌟

@@ -9,6 +9,42 @@
     $items = old('items', $isEdit ? $invoice->items->toArray() : ($prefill['items'] ?? [[
         'service_name' => '', 'quantity' => 1, 'unit' => 'Qty', 'unit_price' => 0, 'discount' => 0, 'discount_type' => 'fixed', 'tax_rate' => $settings->default_tax_rate ?? 18,
     ]]));
+    $effectiveTaxMode = old('tax_mode', $isEdit ? ($invoice->tax_mode ?? 'none') : ($prefill['tax_mode'] ?? $settings->default_tax_mode ?? 'cgst_sgst'));
+    $defaultTaxRate = (float) ($settings->default_tax_rate ?? 18);
+    if ($effectiveTaxMode !== 'none') {
+        foreach ($items as $idx => $item) {
+            if ((float) ($item['tax_rate'] ?? 0) <= 0) {
+                $items[$idx]['tax_rate'] = $defaultTaxRate;
+            }
+        }
+    }
+    $demoBooking = $prefill['demo_booking'] ?? null;
+    $prefillMentors = $prefill['mentors'] ?? ($prefill['mentor_snapshot'] ?? []);
+    $mentors = $mentors ?? \App\Model\Mentor\Mentor::query()
+        ->with(['enabledServices' => fn ($q) => $q->limit(1)])
+        ->orderBy('display_name')
+        ->get(['id', 'display_name', 'username', 'headline'])
+        ->map(function ($mentor) {
+            $service = $mentor->enabledServices->first();
+
+            return (object) [
+                'id' => $mentor->id,
+                'display_name' => $mentor->display_name,
+                'username' => $mentor->username,
+                'default_price' => $service ? (float) $service->price : 0,
+                'service_title' => $service->title ?? null,
+            ];
+        });
+    $mentorSiteUrl = rtrim((string) config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
+    $mentorsJson = $mentors->map(function ($m) {
+        return [
+            'id' => $m->id,
+            'name' => $m->display_name,
+            'username' => $m->username,
+            'default_price' => (float) ($m->default_price ?? 0),
+            'service_title' => $m->service_title ?? null,
+        ];
+    })->values();
 @endphp
 
 <form id="invoice-form" action="{{ $formAction }}" method="post">
@@ -18,6 +54,11 @@
     <input type="hidden" name="source_type" value="{{ old('source_type', $prefillData['source_type'] ?? '') }}">
     <input type="hidden" name="source_id" value="{{ old('source_id', $prefillData['source_id'] ?? '') }}">
     <input type="hidden" name="user_id" id="user_id" value="{{ old('user_id', $prefillData['user_id'] ?? '') }}">
+    @if(!empty($prefillMentors))
+        <input type="hidden" name="mentor_snapshot" id="mentor_snapshot" value="{{ old('mentor_snapshot', json_encode($prefillMentors)) }}">
+    @else
+        <input type="hidden" name="mentor_snapshot" id="mentor_snapshot" value="{{ old('mentor_snapshot', $isEdit && $invoice->mentor_snapshot ? json_encode($invoice->mentor_snapshot) : '') }}">
+    @endif
 
     <div class="row">
         <div class="col-xl-8">
@@ -27,10 +68,36 @@
                 </div>
                 <div class="card-body row g-2">
                     <div class="col-md-4"><input type="number" id="prefill-order-id" class="form-control" placeholder="{{ translate('Order ID') }}"></div>
-                    <div class="col-md-4"><input type="number" id="prefill-booking-id" class="form-control" placeholder="{{ translate('Booking ID') }}"></div>
-                    <div class="col-md-4">
-                        <button type="button" class="btn btn--secondary" id="btn-prefill-order">{{ translate('Load Order') }}</button>
-                        <button type="button" class="btn btn--secondary" id="btn-prefill-booking">{{ translate('Load Booking') }}</button>
+                    <div class="col-md-4"><input type="number" id="prefill-booking-id" class="form-control" placeholder="{{ translate('Mentor Booking ID') }}"></div>
+                    <div class="col-md-4"><input type="text" id="prefill-demo-ref" class="form-control" placeholder="DM-PDOQJR-7117" value="{{ old('demo_ref', request('demo_ref', '')) }}"></div>
+                    <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+                        <button type="button" class="btn btn--secondary btn-sm" id="btn-prefill-order">{{ translate('Load Order') }}</button>
+                        <button type="button" class="btn btn--secondary btn-sm" id="btn-prefill-booking">{{ translate('Load Booking') }}</button>
+                        <button type="button" class="btn btn--primary btn-sm" id="btn-prefill-demo">{{ translate('Load Demo') }}</button>
+                        <span id="prefill-demo-status" class="small"></span>
+                    </div>
+                    @if(!empty($demoPrefillError))
+                        <div class="col-12"><div class="alert alert-danger py-2 mb-0">{{ $demoPrefillError }}</div></div>
+                    @endif
+                    <div class="col-12"><small class="text-muted">{{ translate('Demo ref loads student details and one line item per assigned mentor.') }}</small></div>
+                    <div class="col-12" id="demo-details-card" @if(empty($demoBooking)) style="display:none;" @endif>
+                        <div class="card bg-light border mb-0">
+                            <div class="card-body py-2">
+                                <h6 class="mb-2">{{ translate('Demo student details') }}</h6>
+                                <div class="row small" id="demo-details-body">
+                                    @if(!empty($demoBooking))
+                                        <div class="col-md-6"><strong>{{ translate('Name') }}:</strong> {{ $demoBooking['name'] ?? '—' }}</div>
+                                        <div class="col-md-6"><strong>{{ translate('Ref') }}:</strong> {{ $demoBooking['booking_ref'] ?? '—' }}</div>
+                                        <div class="col-md-6"><strong>{{ translate('Phone') }}:</strong> {{ $demoBooking['phone'] ?? '—' }}</div>
+                                        <div class="col-md-6"><strong>{{ translate('Email') }}:</strong> {{ $demoBooking['email'] ?? '—' }}</div>
+                                        <div class="col-md-6"><strong>{{ translate('Program') }}:</strong> {{ $demoBooking['program'] ?? ($demoBooking['category_label'] ?? '—') }}</div>
+                                        <div class="col-md-6"><strong>{{ translate('Stage') }}:</strong> {{ $demoBooking['stage'] ?? '—' }}</div>
+                                        <div class="col-md-6"><strong>{{ translate('Subjects') }}:</strong> {{ is_array($demoBooking['subjects'] ?? null) ? implode(', ', $demoBooking['subjects']) : '—' }}</div>
+                                        <div class="col-md-6"><strong>{{ translate('Mentors') }}:</strong> {{ !empty($prefillMentors) ? collect($prefillMentors)->pluck('name')->implode(', ') : '—' }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -86,6 +153,8 @@
                         <div class="col-md-3 form-group"><label>{{ translate('PIN/ZIP') }}</label><input type="text" name="billing_postal_code" class="form-control" value="{{ old('billing_postal_code', $isEdit ? $invoice->billing_postal_code : ($prefill['billing_postal_code'] ?? '')) }}"></div>
                         <div class="col-md-6 form-group"><label>{{ translate('GSTIN') }}</label><input type="text" name="customer_gstin" class="form-control" value="{{ old('customer_gstin', $isEdit ? $invoice->customer_gstin : ($prefill['customer_gstin'] ?? '')) }}"></div>
                         <div class="col-md-6 form-group"><label>{{ translate('PAN') }}</label><input type="text" name="customer_pan" class="form-control" value="{{ old('customer_pan', $isEdit ? $invoice->customer_pan : ($prefill['customer_pan'] ?? '')) }}"></div>
+                        <div class="col-md-6 form-group"><label>{{ translate('Aadhaar Number') }}</label><input type="text" name="customer_aadhaar" id="customer_aadhaar" class="form-control" maxlength="12" pattern="\d{12}" placeholder="12-digit Aadhaar" value="{{ old('customer_aadhaar', $isEdit ? $invoice->customer_aadhaar : ($prefill['customer_aadhaar'] ?? '')) }}"></div>
+                        <div class="col-md-6 form-group"><label>{{ translate('Number of Classes Booked') }}</label><input type="number" name="classes_booked" id="classes_booked" class="form-control" min="1" value="{{ old('classes_booked', $isEdit ? $invoice->classes_booked : ($prefill['classes_booked'] ?? '')) }}"></div>
                         <div class="col-12">
                             <div class="custom-control custom-checkbox mb-2">
                                 <input type="checkbox" class="custom-control-input" id="shipping_same" checked>
@@ -106,30 +175,50 @@
             </div>
 
             <div class="card mb-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="mb-0">{{ translate('Invoice Items') }}</h5>
-                    <button type="button" class="btn btn-sm btn--primary" id="add-item-row">{{ translate('Add Item') }}</button>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn--primary btn-add-item-row">{{ translate('Add Item') }}</button>
+                        <button type="button" class="btn btn-sm btn--secondary" id="btn-calculate-items">{{ translate('Calculate Totals') }}</button>
+                    </div>
                 </div>
-                <div class="card-body table-responsive">
-                    <table class="table table-bordered" id="items-table">
+                <div class="card-body invoice-items-wrap p-0 p-md-3">
+                    <table class="table table-bordered invoice-items-table mb-0" id="items-table">
+                        <colgroup>
+                            <col class="col-mentor">
+                            <col class="col-desc">
+                            <col class="col-sessions">
+                            <col class="col-unit">
+                            <col class="col-rate">
+                            <col class="col-disc">
+                            <col class="col-disc-type">
+                            <col class="col-tax">
+                            <col class="col-total">
+                            <col class="col-actions">
+                        </colgroup>
                         <thead><tr>
-                            <th>{{ translate('Item') }}</th>
-                            <th>{{ translate('Description') }}</th>
-                            <th>{{ translate('Qty') }}</th>
-                            <th>{{ translate('Unit') }}</th>
-                            <th>{{ translate('Rate') }}</th>
-                            <th>{{ translate('Disc') }}</th>
-                            <th>{{ translate('Disc %') }}</th>
-                            <th>{{ translate('Tax %') }}</th>
-                            <th>{{ translate('Total') }}</th>
-                            <th></th>
+                            <th class="col-mentor">{{ translate('Mentor') }}</th>
+                            <th class="col-desc">{{ translate('Description') }}</th>
+                            <th class="col-sessions">{{ translate('Sessions') }}</th>
+                            <th class="col-unit">{{ translate('Unit') }}</th>
+                            <th class="col-rate">{{ translate('Rate (₹)') }}</th>
+                            <th class="col-disc">{{ translate('Discount') }}</th>
+                            <th class="col-disc-type">{{ translate('Disc type') }}</th>
+                            <th class="col-tax">{{ translate('GST %') }}</th>
+                            <th class="col-total">{{ translate('Total') }}</th>
+                            <th class="col-actions"></th>
                         </tr></thead>
                         <tbody id="items-body">
                         @foreach($items as $i => $item)
-                            @include('admin-views.invoices.partials.item-row', ['index' => $i, 'item' => $item])
+                            @include('admin-views.invoices.partials.item-row', ['index' => $i, 'item' => $item, 'mentors' => $mentors])
                         @endforeach
                         </tbody>
                     </table>
+                    <div class="px-3 pb-3 pt-2 d-flex flex-wrap gap-2 align-items-center border-top bg-light">
+                        <button type="button" class="btn btn-sm btn--primary btn-add-item-row">{{ translate('Add Item') }}</button>
+                        <button type="button" class="btn btn-sm btn--secondary btn-calculate-items">{{ translate('Calculate Totals') }}</button>
+                        <span id="calc-status" class="small text-muted ms-1"></span>
+                    </div>
                 </div>
             </div>
 
@@ -171,15 +260,20 @@
 
         <div class="col-xl-4">
             <div class="card sticky-top" style="top:80px;">
-                <div class="card-header"><h5 class="mb-0">{{ translate('Invoice Summary') }}</h5></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2">
+                    <h5 class="mb-0">{{ translate('Invoice Summary') }}</h5>
+                    <button type="button" class="btn btn-sm btn--primary btn-calculate-items">{{ translate('Calculate') }}</button>
+                </div>
                 <div class="card-body" id="invoice-summary">
-                    <div class="d-flex justify-content-between"><span>{{ translate('Subtotal') }}</span><strong id="sum-subtotal">₹0.00</strong></div>
-                    <div class="d-flex justify-content-between"><span>{{ translate('Discount') }}</span><strong id="sum-discount">₹0.00</strong></div>
+                    <div class="d-flex justify-content-between"><span>{{ translate('Gross Amount') }}</span><strong id="sum-subtotal">₹0.00</strong></div>
+                    <div class="d-flex justify-content-between" id="sum-discount-row"><span>{{ translate('Discount (−)') }}</span><strong id="sum-discount">₹0.00</strong></div>
                     <div class="d-flex justify-content-between"><span>{{ translate('Taxable Amount') }}</span><strong id="sum-taxable">₹0.00</strong></div>
-                    <div class="d-flex justify-content-between"><span>{{ translate('CGST') }}</span><strong id="sum-cgst">₹0.00</strong></div>
-                    <div class="d-flex justify-content-between"><span>{{ translate('SGST') }}</span><strong id="sum-sgst">₹0.00</strong></div>
-                    <div class="d-flex justify-content-between"><span>{{ translate('IGST') }}</span><strong id="sum-igst">₹0.00</strong></div>
-                    <div class="d-flex justify-content-between"><span>{{ translate('Other Tax') }}</span><strong id="sum-other">₹0.00</strong></div>
+                    <div class="d-flex justify-content-between" id="sum-gst-row" style="display:none;"><span>{{ translate('Total GST') }}</span><strong id="sum-gst">₹0.00</strong></div>
+                    <div class="d-flex justify-content-between small text-muted" id="sum-cgst-row" style="display:none;"><span>{{ translate('↳ CGST (half)') }}</span><strong id="sum-cgst">₹0.00</strong></div>
+                    <div class="d-flex justify-content-between small text-muted" id="sum-sgst-row" style="display:none;"><span>{{ translate('↳ SGST (half)') }}</span><strong id="sum-sgst">₹0.00</strong></div>
+                    <div class="d-flex justify-content-between" id="sum-igst-row" style="display:none;"><span>{{ translate('IGST') }}</span><strong id="sum-igst">₹0.00</strong></div>
+                    <div class="d-flex justify-content-between" id="sum-other-row" style="display:none;"><span>{{ translate('Other Tax') }}</span><strong id="sum-other">₹0.00</strong></div>
+                    <p class="small text-muted mb-2" id="tax-mode-hint" style="display:none;">{{ translate('GST % on each row is applied once. CGST + SGST are equal halves of that GST (not added again).') }}</p>
                     <div class="d-flex justify-content-between"><span>{{ translate('Additional Charges') }}</span><strong id="sum-additional">₹0.00</strong></div>
                     <div class="d-flex justify-content-between"><span>{{ translate('Round Off') }}</span><strong id="sum-roundoff">₹0.00</strong></div>
                     <hr>
@@ -196,6 +290,63 @@
     </div>
 </form>
 
+@push('css')
+<style>
+    .invoice-items-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .invoice-items-table {
+        min-width: 1280px;
+        width: max-content;
+        max-width: none;
+        table-layout: auto;
+    }
+    .invoice-items-table th,
+    .invoice-items-table td { vertical-align: middle; padding: 0.45rem; white-space: nowrap; }
+    .invoice-items-table .col-desc { white-space: normal; min-width: 140px; max-width: 220px; }
+    .invoice-items-table .col-mentor { min-width: 160px; }
+    .invoice-items-table .col-sessions { min-width: 88px; }
+    .invoice-items-table .col-unit { min-width: 96px; }
+    .invoice-items-table .col-rate { min-width: 132px; }
+    .invoice-items-table .col-disc { min-width: 84px; }
+    .invoice-items-table .col-disc-type { min-width: 92px; }
+    .invoice-items-table .col-tax { min-width: 84px; }
+    .invoice-items-table .col-total { min-width: 96px; text-align: right; }
+    .invoice-items-table .col-actions { min-width: 96px; text-align: center; }
+    .invoice-items-table input.form-control-sm,
+    .invoice-items-table select.form-control-sm {
+        width: 100%;
+        min-width: 72px;
+        min-height: 36px;
+        font-size: 0.9rem;
+        padding-left: 0.45rem;
+        padding-right: 0.45rem;
+    }
+    .invoice-items-table .item-rate,
+    .invoice-items-table .item-qty,
+    .invoice-items-table .item-tax,
+    .invoice-items-table .item-discount {
+        font-weight: 600;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        min-width: 80px !important;
+    }
+    .invoice-items-table .item-unit { min-width: 88px !important; }
+    .invoice-items-table .item-line-total {
+        font-weight: 700;
+        white-space: nowrap;
+        color: #1e3a5f;
+        font-variant-numeric: tabular-nums;
+    }
+    .invoice-items-table .col-actions .btn-row-action {
+        min-width: 32px;
+        padding: 4px 8px;
+        line-height: 1.2;
+    }
+    .invoice-items-table .is-invalid { border-color: #dc3545 !important; }
+    #calc-status.text-success { color: #008768 !important; }
+    #calc-status.text-danger { color: #dc3545 !important; }
+</style>
+@endpush
+
 @push('script')
 <script>
     window.invoiceFormConfig = {
@@ -204,8 +355,12 @@
         searchUsersUrl: @json(route('admin.invoices.search-users')),
         prefillOrderUrl: @json(url('/admin/invoices/prefill/order')),
         prefillBookingUrl: @json(url('/admin/invoices/prefill/booking')),
+        prefillDemoUrl: @json(url('/admin/invoices/prefill/demo')),
         defaultTaxRate: {{ (float) ($settings->default_tax_rate ?? 18) }},
+        autoDemoRef: @json(request('demo_ref')),
+        mentors: @json($mentorsJson),
+        mentorkhojSiteUrl: @json($mentorSiteUrl),
     };
 </script>
-<script src="{{ asset('public/assets/admin/js/invoice-form.js') }}?v=1"></script>
+<script src="{{ asset('public/assets/admin/js/invoice-form.js') }}?v=10"></script>
 @endpush

@@ -77,6 +77,8 @@ class WhatsAppMessagingAdminController extends Controller
                 'jee' => trim((string) ($data['template_jee'] ?? 'mentorkhoj_util_demo_jee')) ?: 'mentorkhoj_util_demo_jee',
                 'tech' => trim((string) ($data['template_tech'] ?? 'mentorkhoj_util_demo_tech')) ?: 'mentorkhoj_util_demo_tech',
                 'ai' => trim((string) ($data['template_ai'] ?? 'mentorkhoj_util_demo_ai')) ?: 'mentorkhoj_util_demo_ai',
+                'session_confirmed' => trim((string) ($data['template_session_confirmed'] ?? ($prev['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed')))
+                    ?: 'mentorkhoj_util_session_confirmed',
             ],
         ];
 

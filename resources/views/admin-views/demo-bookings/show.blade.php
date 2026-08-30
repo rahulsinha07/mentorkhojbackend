@@ -15,6 +15,7 @@
                 </h1>
                 <div class="d-flex gap-2">
                     <a href="{{ route('admin.demo-bookings.index') }}" class="btn btn-sm btn-outline-secondary">&larr; All demos</a>
+                    <a href="{{ route('admin.invoices.create', ['demo_ref' => $booking->booking_ref]) }}" class="btn btn-sm btn--primary">{{ translate('Generate Tax Invoice') }}</a>
                     <a class="btn btn-sm btn-outline-danger form-alert" href="javascript:"
                        data-id="demo-booking-delete-{{ $booking->id }}"
                        data-message="Remove this demo booking? This cannot be undone.">
@@ -46,9 +47,18 @@
                             <dd class="col-sm-8">{{ $booking->name }}</dd>
                             <dt class="col-sm-4">Phone</dt>
                             <dd class="col-sm-8">
-                                <a href="tel:{{ $booking->phone }}">{{ $booking->phone }}</a>
-                                ·
-                                <a href="https://wa.me/{{ preg_replace('/\D/', '', $booking->phone) }}" target="_blank" rel="noopener">WhatsApp</a>
+                                @if($booking->phone)
+                                    <a href="tel:{{ $booking->phone }}">{{ $booking->phone }}</a>
+                                @else
+                                    —
+                                @endif
+                                @if($booking->whatsappWebUrl())
+                                    @include('admin-views.partials._whatsapp-web-btn', [
+                                        'url' => $booking->whatsappWebUrl(),
+                                        'title' => 'Student welcome on WhatsApp',
+                                        'label' => 'WhatsApp',
+                                    ])
+                                @endif
                             </dd>
                             <dt class="col-sm-4">Email</dt>
                             <dd class="col-sm-8">
@@ -109,5 +119,96 @@
                 </div>
             </div>
         </div>
+
+        <div class="row">
+            <div class="col-12 mb-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Assigned mentors</h5>
+                    </div>
+                    <div class="card-body">
+                        @if($booking->assignedMentors->isEmpty())
+                            <p class="text-muted mb-3">No mentors assigned yet. Add one or more published mentors below.</p>
+                        @else
+                            <form method="post" action="{{ route('admin.demo-bookings.paid.update', $booking->id) }}" class="mb-4">
+                                @csrf
+                                @method('PUT')
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-borderless table-thead-bordered">
+                                        <thead>
+                                        <tr>
+                                            <th>Mentor</th>
+                                            <th>Paid session done</th>
+                                            <th></th>
+                                        </tr>
+                                        </thead>
+                                        <tbody>
+                                        @foreach($booking->assignedMentors as $mentor)
+                                            <tr>
+                                                <td>
+                                                    <strong>{{ $mentor->display_name }}</strong>
+                                                    @if($mentor->username)
+                                                        <div class="small">
+                                                            <a href="https://www.mentorkhoj.com/mentor/{{ $mentor->username }}" target="_blank" rel="noopener">
+                                                                {{ '@'.$mentor->username }}
+                                                            </a>
+                                                        </div>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    <input type="hidden" name="paid_done[{{ $mentor->id }}]" value="0">
+                                                    <label class="mb-0">
+                                                        <input type="checkbox" name="paid_done[{{ $mentor->id }}]" value="1"
+                                                               {{ !empty($mentor->pivot->paid_session_done) ? 'checked' : '' }}>
+                                                        Done
+                                                    </label>
+                                                </td>
+                                                <td class="text-right">
+                                                    <button form="remove-mentor-{{ $mentor->id }}" class="btn btn-sm btn-outline-danger" type="submit">
+                                                        Remove
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button class="btn btn-primary btn-sm" type="submit">Save paid session status</button>
+                            </form>
+                            @foreach($booking->assignedMentors as $mentor)
+                                <form id="remove-mentor-{{ $mentor->id }}"
+                                      action="{{ route('admin.demo-bookings.mentors.destroy', [$booking->id, $mentor->id]) }}"
+                                      method="post" class="d-none">
+                                    @csrf
+                                    @method('delete')
+                                </form>
+                            @endforeach
+                        @endif
+
+                        <form method="post" action="{{ route('admin.demo-bookings.mentors.store', $booking->id) }}">
+                            @csrf
+                            <div class="form-group mb-2">
+                                <label class="input-label">Add {{ $mentorFilterLabel ?? 'category' }} mentor(s)</label>
+                                @if(($publishedMentors ?? collect())->isEmpty())
+                                    <p class="text-muted mb-0">No published mentors in this category yet.</p>
+                                @else
+                                <select name="mentor_ids[]" class="form-control" multiple size="8" required>
+                                    @foreach($publishedMentors as $m)
+                                        <option value="{{ $m->id }}" {{ in_array($m->id, $assignedIds ?? [], false) ? 'disabled' : '' }}>
+                                            {{ $m->display_name }} @if($m->username)({{ $m->username }})@endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted">Only mentors in this demo category are listed. Hold Cmd/Ctrl to select more than one. Each assign sends the student email (Mentorkhoj copied).</small>
+                            </div>
+                            <button class="btn btn-primary" type="submit">Assign selected mentors</button>
+                                @endif
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @include('admin-views.partials._session-chat-thread')
     </div>
 @endsection

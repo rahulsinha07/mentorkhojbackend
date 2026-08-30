@@ -14,6 +14,7 @@ use App\Http\Requests\Admin\UpdateInvoiceRequest;
 use App\Mail\InvoiceSentMail;
 use App\Model\Invoice\Invoice;
 use App\Model\Invoice\InvoiceSetting;
+use App\Model\Mentor\Mentor;
 use App\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -98,6 +99,18 @@ class InvoiceAdminController extends Controller
             $prefill = InvoicePrefillLogic::fromOrder((int) $request->get('order_id'));
         } elseif ($request->filled('booking_id')) {
             $prefill = InvoicePrefillLogic::fromBooking((int) $request->get('booking_id'));
+        } elseif ($request->filled('demo_ref')) {
+            try {
+                $prefill = InvoicePrefillLogic::fromDemoBooking((string) $request->get('demo_ref'));
+            } catch (\Throwable $e) {
+                session()->flash('error', translate('Demo booking not found: ') . $request->get('demo_ref'));
+            }
+        } elseif ($request->filled('demo_booking_id')) {
+            try {
+                $prefill = InvoicePrefillLogic::fromDemoBooking((string) $request->get('demo_booking_id'));
+            } catch (\Throwable $e) {
+                session()->flash('error', translate('Demo booking not found.'));
+            }
         } elseif ($request->filled('user_id')) {
             $prefill = InvoicePrefillLogic::fromUser((int) $request->get('user_id'));
         }
@@ -106,6 +119,8 @@ class InvoiceAdminController extends Controller
             'settings' => $settings,
             'company' => $company,
             'prefill' => $prefill,
+            'mentors' => $this->mentorOptionsForInvoice(),
+            'demoPrefillError' => session('error'),
             'nextInvoiceNumber' => InvoiceNumberLogic::previewNext($settings),
         ]);
     }
@@ -142,7 +157,9 @@ class InvoiceAdminController extends Controller
         $settings = InvoiceSetting::instance();
         $company = InvoiceCompanyProfile::locked();
 
-        return view('admin-views.invoices.edit', compact('invoice', 'settings', 'company'));
+        return view('admin-views.invoices.edit', compact('invoice', 'settings', 'company') + [
+            'mentors' => $this->mentorOptionsForInvoice(),
+        ]);
     }
 
     public function update(UpdateInvoiceRequest $request, int $id): RedirectResponse|JsonResponse
@@ -262,6 +279,11 @@ class InvoiceAdminController extends Controller
         return response()->json(InvoicePrefillLogic::fromBooking($bookingId));
     }
 
+    public function prefillDemoBooking(string $demoRef): JsonResponse
+    {
+        return response()->json(InvoicePrefillLogic::fromDemoBooking(urldecode($demoRef)));
+    }
+
     public function searchUsers(Request $request): JsonResponse
     {
         $q = trim((string) $request->get('q', ''));
@@ -367,6 +389,9 @@ class InvoiceAdminController extends Controller
                 'shipping_postal_code' => $data['shipping_postal_code'] ?? null,
                 'customer_gstin' => isset($data['customer_gstin']) ? strtoupper(trim($data['customer_gstin'])) : null,
                 'customer_pan' => $data['customer_pan'] ?? null,
+                'customer_aadhaar' => isset($data['customer_aadhaar']) ? preg_replace('/\D/', '', $data['customer_aadhaar']) : null,
+                'classes_booked' => $data['classes_booked'] ?? null,
+                'mentor_snapshot' => !empty($data['mentor_snapshot']) ? $data['mentor_snapshot'] : null,
                 'customer_external_id' => $data['customer_external_id'] ?? null,
                 'subtotal' => $totals['subtotal'],
                 'discount_total' => $totals['discount_total'],
@@ -422,5 +447,26 @@ class InvoiceAdminController extends Controller
 
             return $invoice->fresh(['items']);
         });
+    }
+
+    /** @return \Illuminate\Support\Collection<int, object> */
+    private function mentorOptionsForInvoice()
+    {
+        return Mentor::query()
+            ->with(['enabledServices' => fn ($q) => $q->limit(1)])
+            ->orderBy('display_name')
+            ->get(['id', 'display_name', 'username', 'headline'])
+            ->map(function (Mentor $mentor) {
+                $service = $mentor->enabledServices->first();
+
+                return (object) [
+                    'id' => $mentor->id,
+                    'display_name' => $mentor->display_name,
+                    'username' => $mentor->username,
+                    'headline' => $mentor->headline,
+                    'default_price' => $service ? (float) $service->price : 0,
+                    'service_title' => $service->title ?? null,
+                ];
+            });
     }
 }

@@ -26,7 +26,10 @@ Route::group(['namespace' => 'Api\V1\Mentor'], function () {
             Route::get('my/bookings/{id}/checkout-context', [MentorBookingController::class, 'checkoutContext']);
             Route::post('my/bookings/{id}/verify-payment', [MentorBookingController::class, 'verifyPayment']);
             Route::post('my/bookings/{id}/payment-failed', [MentorBookingController::class, 'reportPaymentFailure']);
+            Route::patch('my/bookings/{id}/schedule', [MentorBookingController::class, 'updateMySchedule']);
+            Route::patch('my/bookings/{id}/complete', [MentorBookingController::class, 'completeMyBooking']);
             Route::get('my/bookings', [MentorBookingController::class, 'myBookings']);
+            Route::get('my/session-credits', [MentorBookingController::class, 'mySessionCredits']);
             Route::get('my/favorites', [MentorFavoriteController::class, 'index']);
             Route::post('{id}/favorite', [MentorFavoriteController::class, 'store']);
             Route::delete('{id}/favorite', [MentorFavoriteController::class, 'destroy']);
@@ -48,7 +51,11 @@ Route::group(['namespace' => 'Api\V1\Mentor'], function () {
         Route::delete('services/{id}', [MentorServiceController::class, 'destroy']);
 
         Route::get('bookings', [MentorBookingController::class, 'mentorBookings']);
+        Route::get('session-credits', [MentorBookingController::class, 'mentorSessionCredits']);
         Route::patch('bookings/{id}/status', [MentorBookingController::class, 'updateStatus']);
+        Route::patch('bookings/{id}/schedule', [MentorBookingController::class, 'updateSchedule']);
+        Route::patch('bookings/{id}/complete', [MentorBookingController::class, 'completeMentorBooking']);
+        Route::get('demo-assignments', [\App\Http\Controllers\Api\V1\SessionChatController::class, 'mentorDemoAssignments']);
 
         Route::get('earnings', [MentorEarningsController::class, 'summary']);
         Route::get('earnings/transactions', [MentorEarningsController::class, 'transactions']);

@@ -3,6 +3,8 @@
 namespace App\Http\Requests\Admin;
 
 use App\CentralLogics\InvoiceCalculationLogic;
+use App\Model\Invoice\InvoiceSetting;
+use App\Model\Mentor\Mentor;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreInvoiceRequest extends FormRequest
@@ -15,6 +17,52 @@ class StoreInvoiceRequest extends FormRequest
     public function rules(): array
     {
         return static::baseRules();
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('mentor_snapshot') && is_string($this->mentor_snapshot)) {
+            $decoded = json_decode($this->mentor_snapshot, true);
+            if (is_array($decoded)) {
+                $this->merge(['mentor_snapshot' => $decoded]);
+            }
+        }
+
+        if ($this->filled('customer_aadhaar')) {
+            $this->merge([
+                'customer_aadhaar' => preg_replace('/\D/', '', (string) $this->customer_aadhaar),
+            ]);
+        }
+
+        $items = $this->input('items', []);
+        if (is_array($items)) {
+            foreach ($items as $index => $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                if (empty($item['service_name']) && !empty($item['sku']) && ctype_digit((string) $item['sku'])) {
+                    $mentor = Mentor::query()->find((int) $item['sku']);
+                    if ($mentor) {
+                        $items[$index]['service_name'] = $mentor->display_name;
+                    }
+                }
+                if (empty($item['unit'])) {
+                    $items[$index]['unit'] = 'Session';
+                }
+                if (!isset($item['unit_price']) || $item['unit_price'] === '') {
+                    $items[$index]['unit_price'] = 0;
+                }
+            }
+            $this->merge(['items' => $items]);
+        }
+
+        $taxMode = (string) $this->input('tax_mode', 'none');
+        $items = $this->input('items', []);
+        if ($taxMode !== 'none' && is_array($items)) {
+            $defaultTaxRate = (float) (InvoiceSetting::instance()->default_tax_rate ?? 18);
+            $items = InvoiceCalculationLogic::normalizeItemTaxRates($items, $taxMode, $defaultTaxRate);
+            $this->merge(['items' => $items]);
+        }
     }
 
     /** @return array<string, mixed> */
@@ -62,6 +110,9 @@ class StoreInvoiceRequest extends FormRequest
                 }
             }],
             'customer_pan' => 'nullable|string|max:16',
+            'customer_aadhaar' => ['nullable', 'string', 'regex:/^\d{12}$/'],
+            'classes_booked' => 'nullable|integer|min:1',
+            'mentor_snapshot' => 'nullable|array',
             'customer_external_id' => 'nullable|string|max:64',
             'items' => 'required|array|min:1',
             'items.*.service_name' => 'required|string|max:191',
@@ -69,7 +120,7 @@ class StoreInvoiceRequest extends FormRequest
             'items.*.sku' => 'nullable|string|max:64',
             'items.*.quantity' => 'required|numeric|gt:0',
             'items.*.unit' => 'nullable|string|max:32',
-            'items.*.unit_price' => 'required|numeric|min:0',
+            'items.*.unit_price' => 'required|numeric|min:0.01',
             'items.*.discount' => 'nullable|numeric|min:0',
             'items.*.discount_type' => 'nullable|in:fixed,percent',
             'items.*.tax_rate' => 'nullable|numeric|min:0|max:100',

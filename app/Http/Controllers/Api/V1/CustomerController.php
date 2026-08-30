@@ -165,10 +165,26 @@ class CustomerController extends Controller
      */
     public function updateProfile(Request $request): JsonResponse
     {
+        $rawPhone = (string) $request->input('phone', '');
+        $normalizedPhone = $this->normalizePhone($rawPhone);
+        $request->merge(['phone' => $normalizedPhone]);
+
         $validator = Validator::make($request->all(), [
             'f_name' => 'required',
             'l_name' => 'required',
-            'phone' => ['required', 'unique:users,phone,'.auth()->user()->id]
+            'phone' => [
+                'required',
+                function ($attribute, $value, $fail) {
+                    if (!preg_match('/^\+[1-9]\d{9,14}$/', (string) $value)) {
+                        $fail('Enter a valid WhatsApp number with country code (e.g. +919876543210).');
+                        return;
+                    }
+                    if (str_starts_with((string) $value, '+91') && !preg_match('/^\+91[6-9]\d{9}$/', (string) $value)) {
+                        $fail('Enter a valid 10-digit Indian mobile number.');
+                    }
+                },
+                'unique:users,phone,'.auth()->user()->id,
+            ],
         ], [
             'f_name.required' => 'First name is required!',
             'l_name.required' => 'Last name is required!',
@@ -200,18 +216,47 @@ class CustomerController extends Controller
             $password = $request->user()->password;
         }
 
+        $currentPhone = (string) ($request->user()->phone ?? '');
         $userDetails = [
             'f_name' => $request->f_name,
             'l_name' => $request->l_name,
-            'phone' => $request->phone,
+            'phone' => $normalizedPhone,
             'image' => $imageName,
             'password' => $password,
             'updated_at' => now()
         ];
+        if ($this->phonesDiffer($currentPhone, $normalizedPhone)) {
+            $userDetails['is_phone_verified'] = 0;
+        }
 
         $this->user->where(['id' => $request->user()->id])->update($userDetails);
 
         return response()->json(['message' => 'successfully updated!'], 200);
+    }
+
+    private function normalizePhone(string $phone): string
+    {
+        $trimmed = preg_replace('/\s+/', '', trim($phone)) ?? '';
+        if ($trimmed === '') {
+            return '';
+        }
+        if (str_starts_with($trimmed, '+')) {
+            return $trimmed;
+        }
+        $digits = preg_replace('/\D/', '', $trimmed) ?? '';
+        if (strlen($digits) === 10 && preg_match('/^[6-9]/', $digits)) {
+            return '+91'.$digits;
+        }
+        if (strlen($digits) === 12 && str_starts_with($digits, '91')) {
+            return '+'.$digits;
+        }
+
+        return $trimmed;
+    }
+
+    private function phonesDiffer(string $a, string $b): bool
+    {
+        return preg_replace('/\D/', '', $a) !== preg_replace('/\D/', '', $b);
     }
 
     /**

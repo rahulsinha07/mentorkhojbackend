@@ -5,17 +5,13 @@ namespace App\Http\Controllers\Admin;
 use App\CentralLogics\Helpers;
 use App\Http\Controllers\Controller;
 use App\Model\Admin;
-use App\Model\Branch;
-use App\Model\Category;
-use App\Model\Order;
-use App\Model\OrderDetail;
-use App\Model\Product;
-use App\Model\Review;
-use App\User;
+use App\Model\DemoBooking;
+use App\Model\Mentor\MentorBooking;
 use Carbon\CarbonPeriod;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -24,15 +20,10 @@ use Illuminate\Support\Facades\DB;
 class DashboardController extends Controller
 {
     public function __construct(
-       private Admin $admin,
-       private Branch $branch,
-       private Category $category,
-       private Order $order,
-       private OrderDetail $orderDetail,
-       private Product $product,
-       private Review $review,
-       private User $user
-    ){}
+        private Admin $admin,
+        private MentorBooking $mentorBooking,
+        private DemoBooking $demoBooking
+    ) {}
 
     /**
      * @param $id
@@ -62,104 +53,90 @@ class DashboardController extends Controller
      */
     public function dashboard(): View|Factory|Application
     {
-        $topSell = $this->orderDetail->with(['product'])
-            ->whereHas('order', function ($query){
-                $query->where('order_status', 'delivered');
-            })
-            ->select('product_id', DB::raw('SUM(quantity) as count'))
-            ->groupBy('product_id')
-            ->orderBy("count", 'desc')
-            ->take(6)
-            ->get();
-
-        $mostRatedProducts = $this->review->with(['product'])
-            ->select(['product_id',
-                DB::raw('AVG(rating) as ratings_average'),
-                DB::raw('COUNT(rating) as total'),
-            ])
-            ->groupBy('product_id')
-            ->orderBy("total", 'desc')
-            ->orderBy("ratings_average", 'desc')
-            ->take(6)
-            ->get();
-
-        $topCustomer = $this->order->with(['customer'])
-            ->select('user_id', DB::raw('COUNT(user_id) as count'))
-            ->groupBy('user_id')
-            ->orderBy("count", 'desc')
-            ->take(6)
-            ->get();
-
         $data = self::orderStatsData();
 
-        $data['customer'] = $this->user->count();
-        $data['product'] = $this->product->count();
-        $data['order'] = $this->order->count();
-        $data['category'] = $this->category->where('parent_id', 0)->count();
-        $data['branch'] = $this->branch->count();
+        $data['requested_count'] = $this->mentorBooking->where('status', 'requested')->count();
+        $data['confirmed_count'] = $this->mentorBooking->where('status', 'confirmed')->count();
+        $data['completed_count'] = $this->mentorBooking->where('status', 'completed')->count();
+        $data['cancelled_count'] = $this->mentorBooking->whereIn('status', ['cancelled', 'refunded'])->count();
 
-        $data['pending_count'] = $this->order->where(['order_status' => 'pending'])->count();
-        $data['ongoing_count'] = $this->order->whereIn('order_status', ['confirmed', 'processing', 'out_for_delivery'])->count();
-        $data['delivered_count'] = $this->order->where(['order_status' => 'delivered'])->count();
-        $data['canceled_count'] = $this->order->where(['order_status' => 'canceled'])->count();
-        $data['returned_count'] = $this->order->where(['order_status' => 'returned'])->count();
-        $data['failed_count'] = $this->order->where(['order_status' => 'failed'])->count();
+        $data['recent_bookings'] = $this->mentorBooking
+            ->with(['mentor', 'service', 'mentee'])
+            ->latest()
+            ->take(5)
+            ->get();
 
-        $data['recent_orders'] = $this->order->notPos()->latest()->take(5)->get(['id', 'created_at', 'order_status']);
+        $data['top_mentors'] = $this->mentorBooking
+            ->with(['mentor'])
+            ->select('mentor_id', DB::raw('COUNT(*) as count'))
+            ->whereNotIn('status', ['cancelled', 'refunded'])
+            ->groupBy('mentor_id')
+            ->orderByDesc('count')
+            ->take(6)
+            ->get();
 
+        $data['recent_demos'] = $this->demoBooking->latest()->take(6)->get();
 
-        $data['top_sell'] = $topSell;
-        $data['most_rated_products'] = $mostRatedProducts;
-        $data['top_customer'] = $topCustomer;
+        $data['top_mentees'] = $this->mentorBooking
+            ->with(['mentee'])
+            ->select('mentee_user_id', DB::raw('COUNT(*) as count'))
+            ->whereNotIn('status', ['cancelled', 'refunded'])
+            ->whereNotNull('mentee_user_id')
+            ->groupBy('mentee_user_id')
+            ->orderByDesc('count')
+            ->take(6)
+            ->get();
 
-        $from = \Carbon\Carbon::now()->startOfYear()->format('Y-m-d');
+        $from = Carbon::now()->startOfYear()->format('Y-m-d');
         $to = Carbon::now()->endOfYear()->format('Y-m-d');
 
-        /*earning statistics chart*/
+        $earning = $this->fillMonthlySeries(
+            $this->paidEarningQuery()
+                ->select(
+                    DB::raw('IFNULL(SUM(amount + tax_amount), 0) as sums'),
+                    DB::raw('YEAR(created_at) year, MONTH(created_at) month')
+                )
+                ->whereBetween('created_at', [$from, $to])
+                ->groupBy('year', 'month')
+                ->get()
+                ->toArray(),
+            'sums'
+        );
 
-        $earning = [];
-        $earningData = $this->order->where([
-            'order_status' => 'delivered'
-        ])->select(
-            DB::raw('IFNULL(sum(order_amount),0) as sums'),
-            DB::raw('YEAR(created_at) year, MONTH(created_at) month')
-        )->whereBetween('created_at', [$from, $to])->groupby('year', 'month')->get()->toArray();
-        for ($inc = 1; $inc <= 12; $inc++) {
-            $earning[$inc] = 0;
-            foreach ($earningData as $match) {
-                if ($match['month'] == $inc) {
-                    $earning[$inc] = $match['sums'];
-                }
-            }
-        }
+        $orderStatisticsChart = $this->fillMonthlySeries(
+            $this->mentorBooking->newQuery()
+                ->select(
+                    DB::raw('COUNT(id) as total'),
+                    DB::raw('YEAR(created_at) year, MONTH(created_at) month')
+                )
+                ->whereBetween('created_at', [$from, $to])
+                ->groupBy('year', 'month')
+                ->get()
+                ->toArray(),
+            'total'
+        );
 
-        /*order statistics chart*/
+        $demoStatisticsChart = $this->fillMonthlySeries(
+            $this->demoBooking->newQuery()
+                ->select(
+                    DB::raw('COUNT(id) as total'),
+                    DB::raw('YEAR(created_at) year, MONTH(created_at) month')
+                )
+                ->whereBetween('created_at', [$from, $to])
+                ->groupBy('year', 'month')
+                ->get()
+                ->toArray(),
+            'total'
+        );
 
-        $orderStatisticsChart = [];
-        $orderStatisticsChartData = $this->order->where(['order_status' => 'delivered'])
-            ->select(
-                DB::raw('(count(id)) as total'),
-                DB::raw('YEAR(created_at) year, MONTH(created_at) month')
-            )->whereBetween('created_at', [$from, $to])->groupby('year', 'month')->get()->toArray();
-
-
-        for ($inc = 1; $inc <= 12; $inc++) {
-            $orderStatisticsChart[$inc] = 0;
-            foreach ($orderStatisticsChartData as $match) {
-                if ($match['month'] == $inc) {
-                    $orderStatisticsChart[$inc] = $match['total'];
-                }
-            }
-        }
-
-        return view('admin-views.dashboard', compact('data', 'earning', 'orderStatisticsChart'));
+        return view('admin-views.dashboard', compact('data', 'earning', 'orderStatisticsChart', 'demoStatisticsChart'));
     }
 
     /**
      * @param Request $request
      * @return JsonResponse
      */
-    public function orderStats(Request $request): \Illuminate\Http\JsonResponse
+    public function orderStats(Request $request): JsonResponse
     {
         session()->put('statistics_type', $request['statistics_type']);
         $data = self::orderStatsData();
@@ -177,290 +154,284 @@ class DashboardController extends Controller
         $today = session()->has('statistics_type') && session('statistics_type') == 'today' ? 1 : 0;
         $thisMonth = session()->has('statistics_type') && session('statistics_type') == 'this_month' ? 1 : 0;
 
-        $pending = $this->order->where(['order_status' => 'pending'])
-            ->when($today, function ($query) {
-                return $query->whereDate('created_at', \Carbon\Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
-        $confirmed = $this->order->where(['order_status' => 'confirmed'])
-            ->when($today, function ($query) {
-                return $query->whereDate('created_at', Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
-        $processing = $this->order->where(['order_status' => 'processing'])
-            ->when($today, function ($query) {
-                return $query->whereDate('created_at', Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
-        $outForDelivery = $this->order->where(['order_status' => 'out_for_delivery'])
-            ->when($today, function ($query) {
-                return $query->whereDate('created_at', Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
-        $delivered = $this->order->where(['order_status' => 'delivered'])
-            ->when($today, function ($query) {
-                return $query->whereDate('created_at', Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
-        $all = $this->order->when($today, function ($query) {
-                return $query->whereDate('created_at', Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
-        $returned = $this->order->where(['order_status' => 'returned'])
-            ->when($today, function ($query) {
-                return $query->whereDate('created_at', Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
-        $failed = $this->order->where(['order_status' => 'failed'])
-            ->when($today, function ($query) {
-                return $query->whereDate('created_at', Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
+        $applyPeriod = function (Builder $query) use ($today, $thisMonth) {
+            return $query
+                ->when($today, fn ($q) => $q->whereDate('created_at', Carbon::today()))
+                ->when($thisMonth, fn ($q) => $q->whereMonth('created_at', Carbon::now())->whereYear('created_at', Carbon::now()->year));
+        };
 
-        $canceled = $this->order->where(['order_status' => 'canceled'])
-            ->when($today, function ($query) {
-                return $query->whereDate('created_at', Carbon::today());
-            })
-            ->when($thisMonth, function ($query) {
-                return $query->whereMonth('created_at', Carbon::now());
-            })
-            ->count();
+        $mentorCount = function (array $statuses) use ($applyPeriod) {
+            $query = $this->mentorBooking->newQuery()->whereIn('status', $statuses);
+            return $applyPeriod($query)->count();
+        };
 
-        return $data = [
-            'pending' => $pending,
-            'confirmed' => $confirmed,
-            'processing' => $processing,
-            'out_for_delivery' => $outForDelivery,
-            'delivered' => $delivered,
-            'all' => $all,
-            'returned' => $returned,
-            'failed' => $failed,
-            'canceled' => $canceled
+        $demoCount = function (string $status) use ($applyPeriod) {
+            $query = $this->demoBooking->newQuery()->where('status', $status);
+            return $applyPeriod($query)->count();
+        };
+
+        return [
+            'mentor_requested' => $mentorCount(['requested']),
+            'mentor_confirmed' => $mentorCount(['confirmed']),
+            'mentor_completed' => $mentorCount(['completed']),
+            'mentor_cancelled' => $mentorCount(['cancelled', 'refunded']),
+            'demo_new' => $demoCount('new'),
+            'demo_contacted' => $demoCount('contacted'),
+            'demo_scheduled' => $demoCount('scheduled'),
+            'demo_converted' => $demoCount('converted'),
+            'mentor_all' => $applyPeriod($this->mentorBooking->newQuery())->count(),
+            'demo_all' => $applyPeriod($this->demoBooking->newQuery())->count(),
         ];
-
     }
 
     /**
-     * filter order statistics in week, month, year by ajax
+     * Filter booking statistics in week, month, year by ajax
      */
-    public function getOrderStatistics(Request $request): \Illuminate\Http\JsonResponse
+    public function getOrderStatistics(Request $request): JsonResponse
     {
         $dateType = $request->type;
+        $mentorData = [];
+        $demoData = [];
+        $key_range = [];
 
-        $order_data = array();
-        if($dateType == 'yearOrder') {
-            $number = 12;
+        if ($dateType == 'yearOrder') {
             $from = Carbon::now()->startOfYear()->format('Y-m-d');
             $to = Carbon::now()->endOfYear()->format('Y-m-d');
+            $key_range = ['Jan', 'Feb', 'Mar', 'April', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-            $orders = $this->order->where(['order_status' => 'delivered'])
-            ->select(
-                DB::raw('(count(id)) as total'),
-                DB::raw('YEAR(created_at) year, MONTH(created_at) month')
-            )->whereBetween('created_at', [$from, $to])->groupby('year', 'month')->get()->toArray();
-
-            for ($inc = 1; $inc <= $number; $inc++) {
-                $order_data[$inc] = 0;
-                foreach ($orders as $match) {
-                    if ($match['month'] == $inc) {
-                        $order_data[$inc] = $match['total'];
-                    }
-                }
-            }
-            $key_range = array("Jan","Feb","Mar","April","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec");
-
-        }elseif($dateType == 'MonthOrder') {
+            $mentorData = $this->fillMonthlySeries(
+                $this->mentorBooking->newQuery()
+                    ->select(DB::raw('COUNT(id) as total'), DB::raw('YEAR(created_at) year, MONTH(created_at) month'))
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('year', 'month')
+                    ->get()
+                    ->toArray(),
+                'total'
+            );
+            $demoData = $this->fillMonthlySeries(
+                $this->demoBooking->newQuery()
+                    ->select(DB::raw('COUNT(id) as total'), DB::raw('YEAR(created_at) year, MONTH(created_at) month'))
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('year', 'month')
+                    ->get()
+                    ->toArray(),
+                'total'
+            );
+        } elseif ($dateType == 'MonthOrder') {
             $from = date('Y-m-01');
             $to = date('Y-m-t');
-            $number = date('d',strtotime($to));
+            $number = (int) date('d', strtotime($to));
             $key_range = range(1, $number);
 
-            $orders = $this->order->where(['order_status' => 'delivered'])
-            ->select(
-                DB::raw('(count(id)) as total'),
-                DB::raw('YEAR(created_at) year, MONTH(created_at) month, DAY(created_at) day')
-            )->whereBetween('created_at', [$from, $to])->groupby('day')->get()->toArray();
-
-            for ($inc = 1; $inc <= $number; $inc++) {
-                $order_data[$inc] = 0;
-                foreach ($orders as $match) {
-                    if ($match['day'] == $inc) {
-                        $order_data[$inc] = $match['total'];
-                    }
-                }
-            }
-
-        }elseif($dateType == 'WeekOrder') {
+            $mentorData = $this->fillDailySeries(
+                $this->mentorBooking->newQuery()
+                    ->select(DB::raw('COUNT(id) as total'), DB::raw('DAY(created_at) day'))
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('day')
+                    ->get()
+                    ->toArray(),
+                $number,
+                'total'
+            );
+            $demoData = $this->fillDailySeries(
+                $this->demoBooking->newQuery()
+                    ->select(DB::raw('COUNT(id) as total'), DB::raw('DAY(created_at) day'))
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('day')
+                    ->get()
+                    ->toArray(),
+                $number,
+                'total'
+            );
+        } elseif ($dateType == 'WeekOrder') {
             Carbon::setWeekStartsAt(Carbon::SUNDAY);
             Carbon::setWeekEndsAt(Carbon::SATURDAY);
 
             $from = Carbon::now()->startOfWeek()->format('Y-m-d 00:00:00');
             $to = Carbon::now()->endOfWeek()->format('Y-m-d 23:59:59');
-            $date_range = CarbonPeriod::create($from, $to)->toArray();
-            $day_range = array();
-            foreach($date_range as $date){
-                $day_range[] =$date->format('d');
-            }
-            $day_range = array_flip($day_range);
-            $day_range_keys = array_keys($day_range);
-            $day_range_values = array_values($day_range);
-            $day_range_intKeys = array_map('intval', $day_range_keys);
-            $day_range = array_combine($day_range_intKeys, $day_range_values);
+            $key_range = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-            $orders = $this->order->where(['order_status' => 'delivered'])
-            ->select(
-                DB::raw('(count(id)) as total'),
-                DB::raw('YEAR(created_at) year, MONTH(created_at) month, DAY(created_at) day')
-            )->whereBetween('created_at', [$from, $to])->groupby('day')->orderBy('created_at', 'ASC')->pluck('total', 'day')->toArray();
-
-            $order_data = array();
-            foreach($day_range as $day=>$value){
-                $day_value = 0;
-                $order_data[$day] = $day_value;
-            }
-
-            foreach($orders as $order_day => $order_value){
-                if(array_key_exists($order_day, $order_data)){
-                    $order_data[$order_day] = $order_value;
-                }
-            }
-            $key_range = array('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday');
+            $dayRange = $this->weekDayRange($from, $to);
+            $mentorData = $this->fillWeekSeries(
+                $this->mentorBooking->newQuery()
+                    ->select(DB::raw('COUNT(id) as total'), DB::raw('DAY(created_at) day'))
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('day')
+                    ->pluck('total', 'day')
+                    ->toArray(),
+                $dayRange
+            );
+            $demoData = $this->fillWeekSeries(
+                $this->demoBooking->newQuery()
+                    ->select(DB::raw('COUNT(id) as total'), DB::raw('DAY(created_at) day'))
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('day')
+                    ->pluck('total', 'day')
+                    ->toArray(),
+                $dayRange
+            );
         }
 
-        $label = $key_range;
-        $order_data_final = $order_data;
-
-        $data = array(
-            'orders_label' => $label,
-            'orders' => array_values($order_data_final),
-        );
-        return response()->json($data);
+        return response()->json([
+            'orders_label' => $key_range,
+            'orders' => array_values($mentorData),
+            'demos' => array_values($demoData),
+        ]);
     }
 
     /**
-     * filter earning statistics in week, month, year by ajax
+     * Filter earning statistics in week, month, year by ajax
      */
-    public function getEarningStatistics(Request $request): \Illuminate\Http\JsonResponse
+    public function getEarningStatistics(Request $request): JsonResponse
     {
         $dateType = $request->type;
+        $earning_data = [];
+        $key_range = [];
 
-        $earning_data = array();
-        if($dateType == 'yearEarn') {
-            $number = 12;
+        if ($dateType == 'yearEarn') {
             $from = Carbon::now()->startOfYear()->format('Y-m-d');
             $to = Carbon::now()->endOfYear()->format('Y-m-d');
+            $key_range = ['Jan', 'Feb', 'Mar', 'April', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-            $earning = $this->order->where([
-                'order_status' => 'delivered'
-            ])->select(
-                DB::raw('IFNULL(sum(order_amount),0) as sums'),
-                DB::raw('YEAR(created_at) year, MONTH(created_at) month')
-            )->whereBetween('created_at', [$from, $to])->groupby('year', 'month')->get()->toArray();
-
-            for ($inc = 1; $inc <= $number; $inc++) {
-                $earning_data[$inc] = 0;
-                foreach ($earning as $match) {
-                    if ($match['month'] == $inc) {
-                        $earning_data[$inc] = $match['sums'];
-                    }
-                }
-            }
-            $key_range = array("Jan","Feb","Mar","April","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec");
-
-
-        }elseif($dateType == 'MonthEarn') {
+            $earning_data = $this->fillMonthlySeries(
+                $this->paidEarningQuery()
+                    ->select(
+                        DB::raw('IFNULL(SUM(amount + tax_amount), 0) as sums'),
+                        DB::raw('YEAR(created_at) year, MONTH(created_at) month')
+                    )
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('year', 'month')
+                    ->get()
+                    ->toArray(),
+                'sums'
+            );
+        } elseif ($dateType == 'MonthEarn') {
             $from = date('Y-m-01');
             $to = date('Y-m-t');
-            $number = date('d',strtotime($to));
+            $number = (int) date('d', strtotime($to));
             $key_range = range(1, $number);
 
-            $earning = $this->order->where([
-                'order_status' => 'delivered'
-            ])->select(
-                DB::raw('IFNULL(sum(order_amount),0) as sums'),
-                DB::raw('YEAR(created_at) year, MONTH(created_at) month, DAY(created_at) day')
-            )->whereBetween('created_at', [$from, $to])->groupby('day')->get()->toArray();
-
-            for ($inc = 1; $inc <= $number; $inc++) {
-                $earning_data[$inc] = 0;
-                foreach ($earning as $match) {
-                    if ($match['day'] == $inc) {
-                        $earning_data[$inc] = $match['sums'];
-                    }
-                }
-            }
-
-        }elseif($dateType == 'WeekEarn') {
+            $earning_data = $this->fillDailySeries(
+                $this->paidEarningQuery()
+                    ->select(
+                        DB::raw('IFNULL(SUM(amount + tax_amount), 0) as sums'),
+                        DB::raw('DAY(created_at) day')
+                    )
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('day')
+                    ->get()
+                    ->toArray(),
+                $number,
+                'sums'
+            );
+        } elseif ($dateType == 'WeekEarn') {
             Carbon::setWeekStartsAt(Carbon::SUNDAY);
             Carbon::setWeekEndsAt(Carbon::SATURDAY);
 
             $from = Carbon::now()->startOfWeek()->format('Y-m-d 00:00:00');
             $to = Carbon::now()->endOfWeek()->format('Y-m-d 23:59:59');
-            $date_range = CarbonPeriod::create($from, $to)->toArray();
-            $day_range = array();
-            foreach($date_range as $date){
-                $day_range[] =$date->format('d');
-            }
-            $day_range = array_flip($day_range);
-            $day_range_keys = array_keys($day_range);
-            $day_range_values = array_values($day_range);
-            $day_range_intKeys = array_map('intval', $day_range_keys);
-            $day_range = array_combine($day_range_intKeys, $day_range_values);
+            $key_range = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-            $earning = $this->order->where([
-                'order_status' => 'delivered'
-            ])->select(
-                DB::raw('IFNULL(sum(order_amount),0) as sums'),
-                DB::raw('YEAR(created_at) year, MONTH(created_at) month, DAY(created_at) day')
-            )->whereBetween('created_at', [$from, $to])->groupby('day')->orderBy('created_at', 'ASC')->pluck('sums', 'day')->toArray();
-
-            $earning_data = array();
-            foreach($day_range as $day=>$value){
-                $day_value = 0;
-                $earning_data[$day] = $day_value;
-            }
-
-            foreach($earning as $order_day => $order_value){
-                if(array_key_exists($order_day, $earning_data)){
-                    $earning_data[$order_day] = $order_value;
-                }
-            }
-
-            $key_range = array('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday');
+            $dayRange = $this->weekDayRange($from, $to);
+            $earning_data = $this->fillWeekSeries(
+                $this->paidEarningQuery()
+                    ->select(
+                        DB::raw('IFNULL(SUM(amount + tax_amount), 0) as sums'),
+                        DB::raw('DAY(created_at) day')
+                    )
+                    ->whereBetween('created_at', [$from, $to])
+                    ->groupBy('day')
+                    ->pluck('sums', 'day')
+                    ->toArray(),
+                $dayRange
+            );
         }
 
-        $label = $key_range;
-        $earning_data_final = $earning_data;
-
-        $data = array(
-            'earning_label' => $label,
-            'earning' => array_values($earning_data_final),
-        );
-        return response()->json($data);
+        return response()->json([
+            'earning_label' => $key_range,
+            'earning' => array_values($earning_data),
+        ]);
     }
 
+    private function paidEarningQuery(): Builder
+    {
+        return $this->mentorBooking->newQuery()
+            ->where('payment_status', 'paid')
+            ->whereNotIn('status', ['cancelled', 'refunded']);
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, float|int>
+     */
+    private function fillMonthlySeries(array $rows, string $valueKey): array
+    {
+        $series = [];
+        for ($inc = 1; $inc <= 12; $inc++) {
+            $series[$inc] = 0;
+            foreach ($rows as $match) {
+                if ((int) $match['month'] === $inc) {
+                    $series[$inc] = $match[$valueKey];
+                }
+            }
+        }
+
+        return $series;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $rows
+     * @return array<int, float|int>
+     */
+    private function fillDailySeries(array $rows, int $number, string $valueKey): array
+    {
+        $series = [];
+        for ($inc = 1; $inc <= $number; $inc++) {
+            $series[$inc] = 0;
+            foreach ($rows as $match) {
+                if ((int) $match['day'] === $inc) {
+                    $series[$inc] = $match[$valueKey];
+                }
+            }
+        }
+
+        return $series;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function weekDayRange(string $from, string $to): array
+    {
+        $day_range = [];
+        foreach (CarbonPeriod::create($from, $to)->toArray() as $date) {
+            $day_range[] = $date->format('d');
+        }
+        $day_range = array_flip($day_range);
+        $day_range_keys = array_keys($day_range);
+        $day_range_values = array_values($day_range);
+        $day_range_intKeys = array_map('intval', $day_range_keys);
+
+        return array_combine($day_range_intKeys, $day_range_values) ?: [];
+    }
+
+    /**
+     * @param array<int, float|int> $valuesByDay
+     * @param array<int, int> $dayRange
+     * @return array<int, float|int>
+     */
+    private function fillWeekSeries(array $valuesByDay, array $dayRange): array
+    {
+        $series = [];
+        foreach ($dayRange as $day => $value) {
+            $series[$day] = 0;
+        }
+        foreach ($valuesByDay as $day => $amount) {
+            if (array_key_exists($day, $series)) {
+                $series[$day] = $amount;
+            }
+        }
+
+        return $series;
+    }
 }

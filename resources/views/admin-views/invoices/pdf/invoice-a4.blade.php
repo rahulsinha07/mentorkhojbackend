@@ -1,6 +1,13 @@
 @php
     $brandColor = $company['brand_color'] ?? '#107980';
     $fmt = fn($n) => \App\CentralLogics\Helpers::set_symbol($n);
+    $customerDisplay = $customer_display ?? [
+        'name' => $invoice->customer_name,
+        'phone' => $invoice->customer_phone,
+        'email' => $invoice->customer_email,
+        'aadhaar' => $invoice->customer_aadhaar ?? null,
+    ];
+    $mentorkhojUrl = $mentorkhoj_url ?? ($company['website'] ?? 'https://www.mentorkhoj.com/');
 @endphp
 <style>
     .inv-wrap { font-family: DejaVu Sans, Arial, sans-serif; color:#1a1a1a; font-size:12px; line-height:1.45; }
@@ -59,10 +66,12 @@
             <td style="border:0;">
                 <div class="inv-box">
                     <h4>Bill To</h4>
-                    <strong>{{ $invoice->customer_name }}</strong><br>
+                    <strong>{{ $customerDisplay['name'] ?? $invoice->customer_name }}</strong><br>
                     @if($invoice->customer_company){{ $invoice->customer_company }}<br>@endif
-                    @if($invoice->customer_email){{ $invoice->customer_email }}<br>@endif
-                    @if($invoice->customer_phone){{ $invoice->customer_phone }}<br>@endif
+                    @if(!empty($customerDisplay['email'])){{ $customerDisplay['email'] }}<br>@endif
+                    @if(!empty($customerDisplay['phone'])){{ $customerDisplay['phone'] }}<br>@endif
+                    @if(!empty($customerDisplay['aadhaar']))Aadhaar: {{ $customerDisplay['aadhaar'] }}<br>@endif
+                    @if($invoice->classes_booked)<span>Classes booked: <strong>{{ $invoice->classes_booked }}</strong></span><br>@endif
                     @if($invoice->billing_address){{ $invoice->billing_address }}<br>@endif
                     @if($invoice->billing_city || $invoice->billing_state){{ trim($invoice->billing_city.' '.$invoice->billing_state) }}<br>@endif
                     @if($invoice->customer_gstin)GSTIN: {{ $invoice->customer_gstin }}@endif
@@ -155,6 +164,7 @@
 
     <div class="inv-footer">
         {{ $company['footer_text'] ?? ($company['brand_name'].' — '.$company['legal_name']) }}<br>
+        Visit <a href="{{ $mentorkhojUrl }}/" style="color:{{ $brandColor }};font-weight:600;">{{ $mentorkhojUrl }}/</a> for mentorship sessions and mentor profiles.<br>
         GSTIN: {{ $company['gstin'] ?? '' }} | {{ $company['phone'] ?? '' }} | {{ $company['email'] ?? '' }}
     </div>
 </div>

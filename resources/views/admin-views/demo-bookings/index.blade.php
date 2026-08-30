@@ -71,7 +71,7 @@
                 @endif
             </div>
 
-            <div class="table-responsive datatable-custom">
+            <div class="table-responsive datatable-custom admin-desktop-booking-table">
                 <table class="table table-borderless table-thead-bordered table-nowrap table-align-middle card-table">
                     <thead class="thead-light">
                     <tr>
@@ -82,6 +82,8 @@
                         <th>Category</th>
                         <th>Stage</th>
                         <th>Status</th>
+                        <th>Mentors</th>
+                        <th>Paid</th>
                         <th>Last communication</th>
                         <th>Created</th>
                         <th class="text-center">Action</th>
@@ -93,14 +95,35 @@
                             <td><a href="{{ route('admin.demo-bookings.show', $b->id) }}">{{ $b->booking_ref }}</a></td>
                             <td>{{ $b->name }}</td>
                             <td>
-                                <a href="https://wa.me/{{ preg_replace('/\D/', '', $b->phone) }}" target="_blank" rel="noopener">
-                                    {{ $b->phone }}
-                                </a>
+                                <span class="d-inline-flex align-items-center">
+                                    @if($b->phone)
+                                        <a href="tel:{{ $b->phone }}">{{ $b->phone }}</a>
+                                    @else
+                                        —
+                                    @endif
+                                    @if($b->whatsappWebUrl())
+                                        @include('admin-views.partials._whatsapp-web-btn', ['url' => $b->whatsappWebUrl(), 'title' => 'Student welcome on WhatsApp'])
+                                    @endif
+                                </span>
                             </td>
                             <td>{{ $b->email ?: '—' }}</td>
                             <td><strong>{{ $b->category_label ?: $b->category }}</strong></td>
                             <td>{{ $b->stage }}</td>
                             <td><span class="badge badge-soft-info">{{ $b->status }}</span></td>
+                            <td class="small" style="max-width: 180px; white-space: normal;">
+                                @if($b->assignedMentors && $b->assignedMentors->count())
+                                    {{ $b->assignedMentors->pluck('display_name')->implode(', ') }}
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if($b->assignedMentors && $b->assignedMentors->contains(function ($m) { return !empty($m->pivot->paid_session_done); }))
+                                    <span class="badge badge-soft-success">Paid done</span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </td>
                             <td class="small" style="max-width: 220px; white-space: normal;">
                                 @if($b->admin_notes)
                                     <div class="text-dark">{{ \Illuminate\Support\Str::limit($b->admin_notes, 80) }}</div>
@@ -137,11 +160,60 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="text-muted">No form fills in this section yet.</td>
+                            <td colspan="12" class="text-muted">No form fills in this section yet.</td>
                         </tr>
                     @endforelse
                     </tbody>
                 </table>
+            </div>
+
+            <div class="admin-mobile-booking-list">
+                @forelse($bookings as $b)
+                    <div class="admin-mobile-booking-card">
+                        <div class="admin-mobile-booking-card__top">
+                            <p class="admin-mobile-booking-card__name">{{ $b->name }}</p>
+                            <span class="badge badge-soft-info">{{ $b->status }}</span>
+                        </div>
+                        <div class="admin-mobile-booking-card__meta">
+                            <div><a href="{{ route('admin.demo-bookings.show', $b->id) }}">{{ $b->booking_ref }}</a></div>
+                            <div><strong>{{ $b->category_label ?: $b->category }}</strong> · {{ $b->stage }}</div>
+                            @if($b->phone)
+                                <div><a href="tel:{{ $b->phone }}">{{ $b->phone }}</a></div>
+                            @endif
+                            @if($b->admin_notes)
+                                <div class="text-dark mt-1">{{ \Illuminate\Support\Str::limit($b->admin_notes, 90) }}</div>
+                            @endif
+                        </div>
+                        <div class="admin-mobile-booking-card__actions">
+                            @if($b->whatsappWebUrl())
+                                @include('admin-views.partials._whatsapp-web-btn', [
+                                    'url' => $b->whatsappWebUrl(),
+                                    'title' => 'Student welcome on WhatsApp',
+                                    'label' => 'WhatsApp',
+                                ])
+                            @endif
+                            <a class="btn btn-outline-primary btn-sm"
+                               href="{{ route('admin.demo-bookings.show', $b->id) }}">
+                                View
+                            </a>
+                            <a class="btn btn-outline-danger btn-sm form-alert"
+                               href="javascript:"
+                               data-id="demo-booking-m-{{ $b->id }}"
+                               data-message="Remove this demo booking? This cannot be undone."
+                               title="Remove">
+                                Delete
+                            </a>
+                            <form action="{{ route('admin.demo-bookings.destroy', $b->id) }}"
+                                  method="post"
+                                  id="demo-booking-m-{{ $b->id }}">
+                                @csrf
+                                @method('delete')
+                            </form>
+                        </div>
+                    </div>
+                @empty
+                    <p class="text-muted mb-0">No form fills in this section yet.</p>
+                @endforelse
             </div>
 
             @if($bookings->hasPages())

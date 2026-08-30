@@ -86,10 +86,34 @@ class MentorServiceController extends Controller
             return response()->json(['errors' => [['message' => 'Service not found']]], 404);
         }
 
-        $fields = ['title', 'description', 'duration_minutes', 'price', 'compare_at_price', 'badge', 'is_popular', 'sort_order', 'meeting_type'];
+        $validator = Validator::make($request->all(), [
+            'title' => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string',
+            'duration_minutes' => 'sometimes|required|integer|min:5|max:480',
+            'price' => 'sometimes|required|numeric|min:0',
+            'compare_at_price' => 'nullable|numeric|min:0',
+            'badge' => 'nullable|in:best_seller,best_deal',
+            'is_popular' => 'nullable|boolean',
+            'is_enabled' => 'nullable|boolean',
+            'sort_order' => 'nullable|integer|min:0',
+            'meeting_type' => 'nullable|string|max:32',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => Helpers::error_processor($validator)], 403);
+        }
+
+        $fields = ['title', 'description', 'duration_minutes', 'price', 'compare_at_price', 'badge', 'is_popular', 'is_enabled', 'sort_order', 'meeting_type'];
         foreach ($fields as $field) {
-            if ($request->has($field)) {
-                $service->{$field} = $request->input($field);
+            if ($request->exists($field)) {
+                $value = $request->input($field);
+                if (in_array($field, ['badge', 'description', 'compare_at_price'], true) && $value === '') {
+                    $value = null;
+                }
+                if ($field === 'is_popular' || $field === 'is_enabled') {
+                    $value = (bool) $value;
+                }
+                $service->{$field} = $value;
             }
         }
         $service->save();
@@ -133,9 +157,16 @@ class MentorServiceController extends Controller
             return response()->json(['errors' => [['message' => 'Service not found']]], 404);
         }
 
-        $service->is_enabled = false;
-        $service->save();
+        if ($service->bookings()->exists()) {
+            return response()->json([
+                'errors' => [[
+                    'message' => 'This session has bookings, so it cannot be deleted. Disable it instead so it no longer appears on your public profile.',
+                ]],
+            ], 409);
+        }
 
-        return response()->json(['message' => 'Service disabled']);
+        $service->delete();
+
+        return response()->json(['message' => 'Service deleted']);
     }
 }

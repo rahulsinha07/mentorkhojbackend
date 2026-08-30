@@ -8,7 +8,9 @@ use App\Mail\Customer\OrderPlaced;
 use App\Model\Branch;
 use App\Model\Category;
 use App\Model\CustomerAddress;
+use App\Model\DemoBooking;
 use App\Model\DeliveryMan;
+use App\Model\Mentor\MentorBooking;
 use App\Model\Order;
 use App\Model\OrderDetail;
 use App\Model\Product;
@@ -31,6 +33,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Pagination\LengthAwarePaginator;
 use PHPUnit\Exception;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
@@ -49,7 +52,9 @@ class POSController extends Controller
         private Order $order,
         private OrderDetail $order_detail,
         private Product $product,
-        private User $user
+        private User $user,
+        private MentorBooking $mentorBooking,
+        private DemoBooking $demoBooking
     ){}
 
     /**
@@ -372,42 +377,166 @@ class POSController extends Controller
      */
     public function orderList(Request $request)
     {
-        $branches = $this->branch->all();
-        $queryParam = [];
-        $search = $request['search'];
-
-        $branchId = $request['branch_id'];
-        $startDate = $request['start_date'];
-        $endDate = $request['end_date'];
-
-        $this->order->where(['checked' => 0])->update(['checked' => 1]);
-
-        $query = $this->order->pos()->with(['customer', 'branch', 'details'])
-            ->when((!is_null($branchId) && $branchId != 'all'), function ($query) use ($branchId) {
-                return $query->where('branch_id', $branchId);
-            })
-            ->when((!is_null($startDate) && !is_null($endDate)), function ($query) use ($startDate, $endDate) {
-                return $query->whereDate('created_at', '>=', $startDate)
-                    ->whereDate('created_at', '<=', $endDate);
-            });
-
-        $queryParam = ['branch_id' => $branchId, 'start_date' => $startDate,'end_date' => $endDate ];
-
-        if ($request->has('search')) {
-            $key = explode(' ', $request['search']);
-            $query = $query->where(function ($q) use ($key) {
-                foreach ($key as $value) {
-                    $q->orWhere('id', 'like', "%{$value}%")
-                        ->orWhere('order_status', 'like', "%{$value}%")
-                        ->orWhere('payment_status', 'like', "%{$value}%");
-                }
-            });
-            $queryParam = ['search' => $request['search']];
+        $search = trim((string) $request->get('search', ''));
+        $type = strtolower((string) $request->get('type', 'all'));
+        if (!in_array($type, ['all', 'mentor', 'demo'], true)) {
+            $type = 'all';
         }
 
-        $orders = $query->orderBy('id', 'desc')->paginate(Helpers::getPagination())->appends($queryParam);
+        $startDate = $request->get('start_date');
+        $endDate = $request->get('end_date');
 
-        return view('admin-views.pos.order.list', compact('orders','search', 'branches', 'branchId', 'startDate', 'endDate'));
+        $queryParam = array_filter([
+            'search' => $search ?: null,
+            'type' => $type !== 'all' ? $type : null,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+        ], fn ($value) => $value !== null && $value !== '');
+
+        if ($type === 'mentor') {
+            $bookings = $this->mentorBookingQuery($search, $startDate, $endDate)
+                ->paginate(Helpers::getPagination())
+                ->through(fn (MentorBooking $booking) => $this->normalizeMentorBookingRow($booking))
+                ->appends($queryParam);
+        } elseif ($type === 'demo') {
+            $bookings = $this->demoBookingQuery($search, $startDate, $endDate)
+                ->paginate(Helpers::getPagination())
+                ->through(fn (DemoBooking $booking) => $this->normalizeDemoBookingRow($booking))
+                ->appends($queryParam);
+        } else {
+            $bookings = $this->paginateUnifiedBookings($search, $startDate, $endDate, $request, $queryParam);
+        }
+
+        $counts = [
+            'all' => $this->mentorBooking->count() + $this->demoBooking->count(),
+            'mentor' => $this->mentorBooking->count(),
+            'demo' => $this->demoBooking->count(),
+        ];
+
+        return view('admin-views.pos.order.list', compact(
+            'bookings',
+            'search',
+            'type',
+            'startDate',
+            'endDate',
+            'counts'
+        ));
+    }
+
+    private function mentorBookingQuery(string $search, ?string $startDate, ?string $endDate)
+    {
+        return $this->mentorBooking->newQuery()
+            ->with(['mentor', 'service', 'mentee'])
+            ->when($startDate && $endDate, fn ($query) => $query->whereDate('created_at', '>=', $startDate)
+                ->whereDate('created_at', '<=', $endDate))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('id', 'like', "%{$search}%")
+                        ->orWhere('status', 'like', "%{$search}%")
+                        ->orWhere('payment_status', 'like', "%{$search}%")
+                        ->orWhereHas('mentor', fn ($m) => $m->where('display_name', 'like', "%{$search}%"))
+                        ->orWhereHas('mentee', function ($u) use ($search) {
+                            $u->where('f_name', 'like', "%{$search}%")
+                                ->orWhere('l_name', 'like', "%{$search}%")
+                                ->orWhere('phone', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%");
+                        });
+                });
+            })
+            ->latest();
+    }
+
+    private function demoBookingQuery(string $search, ?string $startDate, ?string $endDate)
+    {
+        return $this->demoBooking->newQuery()
+            ->when($startDate && $endDate, fn ($query) => $query->whereDate('created_at', '>=', $startDate)
+                ->whereDate('created_at', '<=', $endDate))
+            ->when($search !== '', function ($query) use ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('booking_ref', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('category', 'like', "%{$search}%")
+                        ->orWhere('status', 'like', "%{$search}%");
+                });
+            })
+            ->latest();
+    }
+
+    private function paginateUnifiedBookings(
+        string $search,
+        ?string $startDate,
+        ?string $endDate,
+        Request $request,
+        array $queryParam
+    ): LengthAwarePaginator {
+        $mentorRows = $this->mentorBookingQuery($search, $startDate, $endDate)->get()
+            ->map(fn (MentorBooking $booking) => $this->normalizeMentorBookingRow($booking));
+
+        $demoRows = $this->demoBookingQuery($search, $startDate, $endDate)->get()
+            ->map(fn (DemoBooking $booking) => $this->normalizeDemoBookingRow($booking));
+
+        $rows = $mentorRows->concat($demoRows)->sortByDesc('sort_at')->values();
+        $perPage = Helpers::getPagination();
+        $page = max(1, (int) $request->get('page', 1));
+        $total = $rows->count();
+
+        return new LengthAwarePaginator(
+            $rows->slice(($page - 1) * $perPage, $perPage)->values(),
+            $total,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $queryParam]
+        );
+    }
+
+    private function normalizeMentorBookingRow(MentorBooking $booking): array
+    {
+        $menteeName = trim(($booking->mentee?->f_name ?? '') . ' ' . ($booking->mentee?->l_name ?? ''));
+
+        return [
+            'kind' => 'mentor',
+            'id' => $booking->id,
+            'ref' => 'MB-' . $booking->id,
+            'sort_at' => $booking->created_at?->timestamp ?? 0,
+            'created_at' => $booking->created_at,
+            'customer_name' => $menteeName !== '' ? $menteeName : '—',
+            'customer_phone' => $booking->mentee?->phone,
+            'customer_email' => $booking->mentee?->email,
+            'mentor_or_category' => $booking->mentor?->display_name ?? '—',
+            'service_or_stage' => $booking->service?->title ?? '—',
+            'session_date' => $booking->preferred_date?->format('d M Y'),
+            'amount' => $booking->amount + $booking->tax_amount,
+            'status' => $booking->status,
+            'payment_status' => $booking->payment_status,
+            'show_url' => route('admin.mentor.bookings.show', $booking->id),
+            'customer_url' => $booking->mentee_user_id
+                ? route('admin.customer.view', $booking->mentee_user_id)
+                : null,
+        ];
+    }
+
+    private function normalizeDemoBookingRow(DemoBooking $booking): array
+    {
+        return [
+            'kind' => 'demo',
+            'id' => $booking->id,
+            'ref' => $booking->booking_ref,
+            'sort_at' => $booking->created_at?->timestamp ?? 0,
+            'created_at' => $booking->created_at,
+            'customer_name' => $booking->name,
+            'customer_phone' => $booking->phone,
+            'customer_email' => $booking->email,
+            'mentor_or_category' => $booking->category_label ?: ($booking->category ?: 'Demo'),
+            'service_or_stage' => $booking->stage ?: '—',
+            'session_date' => null,
+            'amount' => null,
+            'status' => $booking->status,
+            'payment_status' => null,
+            'show_url' => route('admin.demo-bookings.show', $booking->id),
+            'customer_url' => $booking->user_id ? route('admin.customer.view', $booking->user_id) : null,
+        ];
     }
 
     /**
@@ -747,62 +876,59 @@ class POSController extends Controller
      */
     public function exportOrders(Request $request): StreamedResponse|string
     {
-        $queryParam = [];
-        $search = $request['search'];
-
-        $branchId = $request['branch_id'];
-        $startDate = $request['start_date'];
-        $endDate = $request['end_date'];
-
-        $query = $this->order->pos()->with(['customer', 'branch'])
-            ->when((!is_null($branchId) && $branchId != 'all'), function ($query) use ($branchId) {
-                return $query->where('branch_id', $branchId);
-            })
-            ->when((!is_null($startDate) && !is_null($endDate)), function ($query) use ($startDate, $endDate) {
-                return $query->whereDate('created_at', '>=', $startDate)
-                    ->whereDate('created_at', '<=', $endDate);
-            });
-
-        if ($request->has('search')) {
-            $key = explode(' ', $request['search']);
-            $query = $query->where(function ($q) use ($key) {
-                foreach ($key as $value) {
-                    $q->orWhere('id', 'like', "%{$value}%")
-                        ->orWhere('order_status', 'like', "%{$value}%")
-                        ->orWhere('payment_status', 'like', "%{$value}%");
-                }
-            });
-            $queryParam = ['search' => $request['search']];
+        $search = trim((string) $request->get('search', ''));
+        $type = strtolower((string) $request->get('type', 'all'));
+        if (!in_array($type, ['all', 'mentor', 'demo'], true)) {
+            $type = 'all';
         }
 
-        $orders = $query->with('details')->orderBy('id', 'DESC')->get();
-
+        $startDate = $request->get('start_date');
+        $endDate = $request->get('end_date');
         $storage = [];
-        foreach($orders as $order){
-            $vatStatus = $order->details[0] ? $order->details[0]->vat_status : '';
-            if($vatStatus == 'included'){
-                $orderAmount = $order['order_amount'] - $order['total_tax_amount'];
-            }else{
-                $orderAmount = $order['order_amount'];
-            }
 
-            $branch = $order->branch ? $order->branch->name : '';
-            $customer = $order->customer ? $order->customer->f_name .' '. $order->customer->l_name : 'Walking Customer';
-            $storage[] = [
-                'Order Id' => $order['id'],
-                'Order Date' => date('d M Y',strtotime($order['created_at'])),
-                'Customer' => $customer,
-                'Branch'=>$branch,
-                'Order Amount' => $orderAmount,
-                'Order Status' => $order['order_status'],
-                'Order Type' => $order['order_type'],
-                'Payment Status' => $order['payment_status'],
-                'Payment Method' => $order['payment_method'],
-                'Delivery Date' => $order['delivery_date'],
-            ];
+        if ($type === 'all' || $type === 'mentor') {
+            foreach ($this->mentorBookingQuery($search, $startDate, $endDate)->get() as $booking) {
+                $row = $this->normalizeMentorBookingRow($booking);
+                $storage[] = [
+                    'Type' => 'Mentor session',
+                    'Reference' => $row['ref'],
+                    'Created' => $row['created_at']?->format('d M Y H:i'),
+                    'Customer' => $row['customer_name'],
+                    'Phone' => $row['customer_phone'] ?: '',
+                    'Email' => $row['customer_email'] ?: '',
+                    'Mentor / Category' => $row['mentor_or_category'],
+                    'Service / Stage' => $row['service_or_stage'],
+                    'Session Date' => $row['session_date'] ?: '',
+                    'Amount' => $row['amount'],
+                    'Status' => $row['status'],
+                    'Payment Status' => $row['payment_status'],
+                ];
+            }
         }
 
-        return (new FastExcel($storage))->download('pos-orders.xlsx');
+        if ($type === 'all' || $type === 'demo') {
+            foreach ($this->demoBookingQuery($search, $startDate, $endDate)->get() as $booking) {
+                $row = $this->normalizeDemoBookingRow($booking);
+                $storage[] = [
+                    'Type' => 'Demo booking',
+                    'Reference' => $row['ref'],
+                    'Created' => $row['created_at']?->format('d M Y H:i'),
+                    'Customer' => $row['customer_name'],
+                    'Phone' => $row['customer_phone'] ?: '',
+                    'Email' => $row['customer_email'] ?: '',
+                    'Mentor / Category' => $row['mentor_or_category'],
+                    'Service / Stage' => $row['service_or_stage'],
+                    'Session Date' => '',
+                    'Amount' => '',
+                    'Status' => $row['status'],
+                    'Payment Status' => '',
+                ];
+            }
+        }
+
+        usort($storage, fn ($a, $b) => strcmp($b['Created'], $a['Created']));
+
+        return (new FastExcel($storage))->download('bookings.xlsx');
     }
 
     /**

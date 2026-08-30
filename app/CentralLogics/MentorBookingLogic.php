@@ -377,7 +377,7 @@ class MentorBookingLogic
         }
     }
 
-    public static function formatBooking(MentorBooking $booking): array
+    public static function formatBooking(MentorBooking $booking, bool $forMentor = false): array
     {
         $booking->loadMissing(['service', 'mentee', 'mentor']);
         return [
@@ -394,7 +394,10 @@ class MentorBookingLogic
             'service' => $booking->service ? MentorLogic::formatService($booking->service) : null,
             'mentee' => $booking->mentee ? [
                 'id' => $booking->mentee->id,
-                'name' => trim(($booking->mentee->f_name ?? '') . ' ' . ($booking->mentee->l_name ?? '')),
+                'name' => $forMentor
+                    ? SessionChatLogic::firstName($booking->mentee->f_name ?? '')
+                    : trim(($booking->mentee->f_name ?? '') . ' ' . ($booking->mentee->l_name ?? '')),
+                'first_name' => SessionChatLogic::firstName($booking->mentee->f_name ?? ''),
             ] : null,
             'preferred_date' => $booking->preferred_date?->format('Y-m-d'),
             'preferred_time' => $booking->preferred_time,
@@ -404,12 +407,20 @@ class MentorBookingLogic
             'tax_amount' => $booking->tax_amount,
             'total_amount' => round((float) $booking->amount + (float) $booking->tax_amount, 2),
             'payment_status' => $booking->payment_status,
+            'booking_source' => $booking->booking_source ?? 'paid',
+            'session_credit_id' => $booking->session_credit_id,
             'requires_payment' => $booking->payment_status === 'pending',
             'can_retry_payment' => $booking->payment_status === 'failed',
+            'can_reschedule' => SessionCreditLogic::canReschedule($booking),
+            'can_mark_complete' => SessionCreditLogic::canMarkComplete($booking),
+            'is_upcoming' => SessionCreditLogic::isUpcoming($booking),
+            'is_past' => SessionCreditLogic::isPast($booking),
             'emails_sent' => [
                 'mentee_booked' => (bool) ($booking->mentee_booked_email_sent_at ?? false),
                 'mentor_notify' => (bool) ($booking->mentor_notify_email_sent_at ?? false),
                 'mentee_confirmed' => (bool) ($booking->mentee_confirmed_email_sent_at ?? false),
+                'schedule_notify' => (bool) ($booking->schedule_notify_sent_at ?? false),
+                'session_reminder_24h' => (bool) ($booking->session_reminder_24h_sent_at ?? false),
             ],
             'created_at' => $booking->created_at?->toIso8601String(),
         ];

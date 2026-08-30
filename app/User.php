@@ -2,7 +2,9 @@
 
 namespace App;
 
+use App\CentralLogics\WhatsAppWebLink;
 use App\Model\CustomerAddress;
+use App\Model\DemoBooking;
 use App\Model\FavoriteProduct;
 use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorBooking;
@@ -69,6 +71,11 @@ class User extends Authenticatable
         return $this->hasMany(MentorBooking::class, 'mentee_user_id');
     }
 
+    public function demoBookings(): HasMany
+    {
+        return $this->hasMany(DemoBooking::class, 'user_id');
+    }
+
     public function getHasMentorProfileAttribute(): bool
     {
         if ($this->relationLoaded('mentorProfile')) {
@@ -115,5 +122,25 @@ class User extends Authenticatable
     public function search_volume()
     {
         return $this->hasMany(SearchedKeywordUser::class, 'user_id', 'id');
+    }
+
+    public function displayName(): string
+    {
+        $name = trim(($this->f_name ?? '').' '.($this->l_name ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        return trim((string) ($this->name ?? '')) ?: 'there';
+    }
+
+    public function whatsappWebUrl(?string $role = null): ?string
+    {
+        $role = $role ?: (($this->account_type ?? '') === 'mentor' ? 'mentor' : 'student');
+        $text = $role === 'mentor'
+            ? WhatsAppWebLink::mentorWelcome($this->displayName())
+            : WhatsAppWebLink::studentWelcome($this->displayName());
+
+        return WhatsAppWebLink::url($this->phone ? (string) $this->phone : null, $text);
     }
 }

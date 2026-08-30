@@ -94,6 +94,124 @@ class MentorBookingMailLogic
         }
     }
 
+    /**
+     * Email + WhatsApp after mentor sets date/time on a confirmed booking.
+     */
+    public static function sendScheduleConfirmedNotify(MentorBooking $booking, bool $force = false): bool
+    {
+        $booking->loadMissing(['mentor.user', 'service', 'mentee']);
+
+        if ($booking->status !== 'confirmed' || !$booking->preferred_date || !$booking->preferred_time) {
+            return false;
+        }
+
+        if (!$force && self::hasEmailTimestampColumn('schedule_notify_sent_at') && $booking->schedule_notify_sent_at) {
+            return false;
+        }
+
+        $emailOk = false;
+        if (FormMailLogic::isMailEnabled() && self::menteeEmail($booking)) {
+            try {
+                Mail::to(self::menteeEmail($booking))->cc(FormMailLogic::notifyEmail())->send(new FormSubmissionMail(
+                    'Your MentorKhoj session time is confirmed | MentorKhoj',
+                    'email-templates.form.mentor-booking-mentee-confirmed',
+                    FormMailLogic::withBrandPublic(self::bookingContext($booking, confirmed: true))
+                ));
+                if (self::hasEmailTimestampColumn('mentee_confirmed_email_sent_at')) {
+                    $booking->mentee_confirmed_email_sent_at = now();
+                }
+                $emailOk = true;
+            } catch (\Throwable $e) {
+                Log::warning('Schedule confirmed email failed: ' . $e->getMessage());
+            }
+        }
+
+        $phone = trim((string) ($booking->mentee?->phone ?? ''));
+        if ($phone !== '') {
+            $date = $booking->preferred_date
+                ? Carbon::parse($booking->preferred_date)->format('d M Y')
+                : '';
+            $time = self::formatSessionTime($booking->preferred_time);
+            WhatsAppDemoBookingModule::sendSessionConfirmed(
+                $phone,
+                self::firstNameFromUser($booking->mentee),
+                $date,
+                $time
+            );
+        }
+
+        if (self::hasEmailTimestampColumn('schedule_notify_sent_at')) {
+            $booking->schedule_notify_sent_at = now();
+            $booking->save();
+        }
+
+        return $emailOk;
+    }
+
+    /**
+     * 24h-before reminder to mentor + student, Mentorkhoj on CC.
+     */
+    public static function sendSessionReminder24h(MentorBooking $booking): bool
+    {
+        if (!FormMailLogic::isMailEnabled()) {
+            return false;
+        }
+
+        $booking->loadMissing(['mentor.user', 'service', 'mentee']);
+
+        if (!in_array((string) $booking->status, ['requested', 'confirmed'], true)) {
+            return false;
+        }
+
+        if (!$booking->preferred_date || !$booking->preferred_time) {
+            return false;
+        }
+
+        if (self::hasEmailTimestampColumn('session_reminder_24h_sent_at') && $booking->session_reminder_24h_sent_at) {
+            return false;
+        }
+
+        $when = SessionCreditLogic::sessionDateTime($booking);
+        if (!$when) {
+            return false;
+        }
+
+        $now = now();
+        if ($when->lte($now) || $when->gt($now->copy()->addHours(24))) {
+            return false;
+        }
+
+        $recipients = array_values(array_unique(array_filter([
+            self::menteeEmail($booking),
+            self::mentorEmail($booking),
+        ])));
+
+        if ($recipients === []) {
+            return false;
+        }
+
+        try {
+            Mail::to($recipients)
+                ->cc(FormMailLogic::notifyEmail())
+                ->send(new FormSubmissionMail(
+                    'Reminder: your MentorKhoj session is in 24 hours | MentorKhoj',
+                    'email-templates.form.mentor-booking-session-reminder-24h',
+                    FormMailLogic::withBrandPublic(self::bookingContext($booking, confirmed: true))
+                ));
+
+            if (self::hasEmailTimestampColumn('session_reminder_24h_sent_at')) {
+                $booking->session_reminder_24h_sent_at = now();
+                $booking->save();
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('Session 24h reminder email failed: ' . $e->getMessage());
+
+            return false;
+        }
+    }
+
     public static function maybeSendAfterPayment(MentorBooking $booking): void
     {
         if ($booking->payment_status !== 'paid') {
@@ -101,6 +219,67 @@ class MentorBookingMailLogic
         }
 
         self::sendBookingPlacedEmails($booking);
+    }
+
+    public static function defaultPaymentLink(MentorBooking $booking): string
+    {
+        $siteUrl = rtrim((string) config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
+
+        return $siteUrl . '/my-bookings/' . $booking->id;
+    }
+
+    public static function sendPaymentReminderEmail(MentorBooking $booking, ?string $paymentLink = null, ?string $overrideRecipient = null): bool
+    {
+        if (!FormMailLogic::isMailEnabled()) {
+            Log::warning('Payment reminder mail skipped: SMTP not configured');
+
+            return false;
+        }
+
+        $booking->loadMissing(['mentor.user', 'service', 'mentee']);
+
+        if (!in_array($booking->payment_status, ['pending', 'failed'], true)) {
+            return false;
+        }
+
+        $recipient = trim((string) ($overrideRecipient ?? ''));
+        if ($recipient === '') {
+            $recipient = self::menteeEmail($booking) ?? '';
+        }
+        if ($recipient === '') {
+            return false;
+        }
+
+        $link = trim((string) ($paymentLink ?? ''));
+        if ($link === '') {
+            $link = self::defaultPaymentLink($booking);
+        }
+
+        $context = self::bookingContext($booking);
+        $context['payment_link'] = $link;
+        $context['amount_due'] = $context['amount_paid'];
+        $context['amount_label'] = 'Amount due';
+
+        try {
+            Mail::to($recipient)
+                ->cc(FormMailLogic::notifyEmail())
+                ->send(new FormSubmissionMail(
+                    'Complete payment for your MentorKhoj session | MentorKhoj',
+                    'email-templates.form.mentor-booking-payment-reminder',
+                    FormMailLogic::withBrandPublic($context)
+                ));
+
+            if (!$overrideRecipient && self::hasEmailTimestampColumn('payment_reminder_email_sent_at')) {
+                $booking->payment_reminder_email_sent_at = now();
+                $booking->save();
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('Payment reminder email failed: ' . $e->getMessage());
+
+            return false;
+        }
     }
 
     /** @return array<string, mixed> */
@@ -135,10 +314,12 @@ class MentorBookingMailLogic
                 ? 'Free'
                 : $currency . number_format($totalPaid, 2),
             'session_access_link' => $confirmed
-                ? $siteUrl . '/my-bookings/' . $booking->id
-                : $siteUrl . '/my-bookings',
-            'mentor_dashboard_link' => $siteUrl . '/mentor/dashboard/bookings/' . $booking->id,
+                ? $siteUrl . '/account/sessions'
+                : $siteUrl . '/account/sessions',
+            'mentor_dashboard_link' => $siteUrl . '/mentor/dashboard/bookings',
             'support_email' => FormMailLogic::adminEmail(),
+            'support_phone_primary' => '+91 73669 39888',
+            'support_phone_secondary' => '+91 91026 95888',
             'for_mentor' => $forMentor,
             'confirmed' => $confirmed,
             'mentee_note' => trim((string) ($booking->mentee_note ?? '')),

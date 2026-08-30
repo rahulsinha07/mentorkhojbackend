@@ -17,12 +17,29 @@
                     {{translate('customers list')}} <span class="badge badge-soft-primary ml-2 badge-pill">{{ $customers->total() }}</span>
                 </span>
             </h1>
+            <ul class="nav nav-tabs border-0">
+                <li class="nav-item">
+                    <a class="nav-link {{ ($type ?? 'student') === 'student' ? 'active' : '' }}"
+                       href="{{ route('admin.customer.list', array_filter(['type' => 'student', 'search' => $search ?? null])) }}">
+                        {{ translate('Students') }}
+                        <span class="badge badge-soft-secondary badge-pill ml-1">{{ $tabCounts['student'] ?? 0 }}</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ ($type ?? '') === 'mentor' ? 'active' : '' }}"
+                       href="{{ route('admin.customer.list', array_filter(['type' => 'mentor', 'search' => $search ?? null])) }}">
+                        {{ translate('Mentors') }}
+                        <span class="badge badge-soft-secondary badge-pill ml-1">{{ $tabCounts['mentor'] ?? 0 }}</span>
+                    </a>
+                </li>
+            </ul>
         </div>
 
         <div class="card">
             <div class="card-header">
                 <div class="card--header">
                     <form action="{{url()->current()}}" method="GET">
+                        <input type="hidden" name="type" value="{{ $type ?? 'student' }}">
                         <div class="input-group">
                             <input id="datatableSearch_" type="search" name="search"
                                 class="form-control"
@@ -49,7 +66,7 @@
                             class="hs-unfold-content dropdown-unfold dropdown-menu dropdown-menu-sm-right">
                             <span class="dropdown-header">{{ translate('download') }}
                                 {{ translate('options') }}</span>
-                            <a id="export-excel" class="dropdown-item" href="{{route('admin.customer.export', ['search'=>Request::get('search')])}}">
+                            <a id="export-excel" class="dropdown-item" href="{{route('admin.customer.export', array_filter(['search'=>Request::get('search'), 'type' => $type ?? 'student']))}}">
                                 <img class="avatar avatar-xss avatar-4by3 mr-2"
                                     src="{{ asset('public/assets/admin') }}/svg/components/excel.svg"
                                     alt="{{ translate('excel') }}">
@@ -68,11 +85,17 @@
                         <th class="table-column-pl-0">{{translate('customer name')}}</th>
                         <th>{{translate('contact info')}}</th>
                         <th class="text-center">{{translate('Account type')}}</th>
-                        <th class="text-center">{{translate('Mentor profile')}}</th>
+                        @if(($type ?? 'student') === 'student')
+                            <th class="text-center">{{ translate('Latest session') }}</th>
+                            <th class="text-center">{{ translate('Payment') }}</th>
+                            <th class="text-center">{{ translate('Demo lead') }}</th>
+                        @else
+                            <th class="text-center">{{translate('Mentor profile')}}</th>
+                        @endif
                         <th class="text-center">{{translate('Last login')}}</th>
                         <th class="text-center">{{translate('Auth method')}}</th>
-                        <th class="text-center">{{translate('Total Orders')}}</th>
-                        <th class="text-center">{{translate('Total Order Amount')}}</th>
+                        <th class="text-center">{{ translate('Sessions') }}</th>
+                        <th class="text-center">{{ translate('Session amount') }}</th>
                         <th class="text-center">{{translate('status')}}</th>
                         <th class="text-center">{{translate('action')}}</th>
                     </tr>
@@ -98,7 +121,16 @@
                                     <a href="mailto:{{$customer['email']}}">{{$customer['email']}}</a>
                                 </h5>
                                 <div>
-                                    <a href="Tel:{{$customer['phone']}}">{{$customer['phone']}}</a>
+                                    @php($phone = trim((string) ($customer['phone'] ?? '')))
+                                    @if($phone === '' || $phone === '0')
+                                        <span class="text-muted">—</span>
+                                    @else
+                                        <a href="Tel:{{ $phone }}">{{ $phone }}</a>
+                                        @include('admin-views.partials._whatsapp-web-btn', [
+                                            'url' => $customer->whatsappWebUrl(($type ?? 'student') === 'mentor' ? 'mentor' : 'student'),
+                                            'title' => (($type ?? 'student') === 'mentor' ? 'Mentor' : 'Student').' welcome on WhatsApp',
+                                        ])
+                                    @endif
                                 </div>
                             </td>
                             <td class="text-center">
@@ -107,15 +139,52 @@
                                     {{ \App\CentralLogics\AccountTypeLogic::accountTypeLabel($accountType) }}
                                 </span>
                             </td>
-                            <td class="text-center">
-                                @if($customer->mentorProfile)
-                                    <a href="{{ route('admin.mentor.edit', [$customer->mentorProfile->id]) }}" class="badge badge-soft-info py-2 px-3 font-medium">
-                                        @{{ $customer->mentorProfile->username }}
-                                    </a>
-                                @else
-                                    <span class="text-muted">—</span>
-                                @endif
-                            </td>
+                            @if(($type ?? 'student') === 'student')
+                                <td class="text-center">
+                                    @if($customer->latest_mentor_name ?? null)
+                                        <div>{{ $customer->latest_mentor_name }}</div>
+                                        @if($customer->latest_session_date)
+                                            <small class="text-muted">
+                                                {{ \Carbon\Carbon::parse($customer->latest_session_date)->format('d M Y') }}
+                                                @if($customer->latest_session_time)
+                                                    {{ substr($customer->latest_session_time, 0, 5) }}
+                                                @endif
+                                            </small>
+                                        @endif
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    @if($customer->latest_payment_status ?? null)
+                                        <span class="badge badge-soft-{{ $customer->latest_payment_status === 'paid' ? 'success' : ($customer->latest_payment_status === 'failed' ? 'danger' : 'warning') }}">
+                                            {{ $customer->latest_payment_status }}
+                                        </span>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
+                                <td class="text-center">
+                                    @if($customer->latest_demo_ref ?? null)
+                                        <div>{{ $customer->latest_demo_ref }}</div>
+                                        @if($customer->latest_demo_vertical)
+                                            <small class="text-muted">{{ strtoupper($customer->latest_demo_vertical) }}</small>
+                                        @endif
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
+                            @else
+                                <td class="text-center">
+                                    @if($customer->mentorProfile)
+                                        <a href="{{ route('admin.mentor.edit', [$customer->mentorProfile->id]) }}" class="badge badge-soft-info py-2 px-3 font-medium">
+                                            @{{ $customer->mentorProfile->username }}
+                                        </a>
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
+                            @endif
                             <td class="text-center">
                                 <div>{{ \App\CentralLogics\AccountTypeLogic::loginPortalLabel($customer->last_login_as ?? null) }}</div>
                                 @if($customer->last_login_at)
@@ -156,6 +225,16 @@
                                     <a class="action-btn" href="{{route('admin.customer.view',[$customer['id']])}}" title="{{ translate('View') }}">
                                         <i class="tio-invisible"></i>
                                     </a>
+                                    @if(($type ?? 'student') === 'student' && (int) ($customer->pending_payment_count ?? 0) > 0 && ($customer->latest_mentee_booking_id ?? null))
+                                        <a class="action-btn" href="javascript:" title="{{ translate('Send payment email') }}"
+                                           data-toggle="modal" data-target="#paymentReminderModal"
+                                           data-booking-id="{{ $customer->latest_mentee_booking_id }}"
+                                           data-mentor-name="{{ $customer->latest_mentor_name ?? '' }}"
+                                           data-session-date="{{ $customer->latest_session_date ? \Carbon\Carbon::parse($customer->latest_session_date)->format('d M Y') : '' }}"
+                                           data-payment-link="{{ rtrim(config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/') . '/my-bookings/' . $customer->latest_mentee_booking_id }}">
+                                            <i class="tio-email-outlined"></i>
+                                        </a>
+                                    @endif
                                     <a class="action-btn" href="javascript:" title="{{ translate('Reset password') }}"
                                        data-toggle="modal" data-target="#resetPasswordModal"
                                        data-customer-id="{{ $customer->id }}"
@@ -231,6 +310,33 @@
             </form>
         </div>
     </div>
+
+    <div class="modal fade" id="paymentReminderModal" tabindex="-1" role="dialog" aria-labelledby="paymentReminderModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <form method="post" id="paymentReminderForm" class="modal-content">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title" id="paymentReminderModalLabel">{{ translate('Send payment email') }}</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2" id="paymentReminderSummary"></p>
+                    <div class="form-group">
+                        <label>{{ translate('Payment link') }}</label>
+                        <input type="url" name="payment_link" id="paymentReminderLink" class="form-control"
+                               placeholder="https://www.mentorkhoj.com/my-bookings/...">
+                        <small class="text-muted">{{ translate('Leave default or paste a custom Razorpay / payment URL') }}</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ translate('Close') }}</button>
+                    <button type="submit" class="btn btn--primary">{{ translate('Send email') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
 
 @push('script_2')
@@ -242,6 +348,17 @@
             $('#resetPasswordCustomerName').text('{{ translate('Customer') }}: ' + customerName);
             $('#resetPasswordForm').attr('action', @json(route('admin.customer.reset-password', ['id' => '__ID__'])).replace('__ID__', customerId));
             $('#resetPasswordForm')[0].reset();
+        });
+
+        $('#paymentReminderModal').on('show.bs.modal', function (event) {
+            const button = $(event.relatedTarget);
+            const bookingId = button.data('booking-id');
+            const mentorName = button.data('mentor-name') || '—';
+            const sessionDate = button.data('session-date') || '—';
+            const paymentLink = button.data('payment-link') || '';
+            $('#paymentReminderSummary').text('{{ translate('Session with') }} ' + mentorName + ' · ' + sessionDate);
+            $('#paymentReminderLink').val(paymentLink);
+            $('#paymentReminderForm').attr('action', @json(route('admin.customer.send-payment-email', ['id' => '__ID__'])).replace('__ID__', bookingId));
         });
     </script>
 @endpush

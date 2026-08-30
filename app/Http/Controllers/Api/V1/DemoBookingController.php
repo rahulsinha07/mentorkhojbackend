@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\CentralLogics\DemoBookingClaimLogic;
+use App\CentralLogics\MentorImageService;
 use App\CentralLogics\WhatsAppDemoBookingModule;
 use App\Model\DemoBooking;
+use App\Model\Mentor\MentorBooking;
 use App\Services\DemoBookingMailService;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -92,12 +95,65 @@ class DemoBookingController extends Controller
             return response()->json(['ok' => false, 'message' => 'Unauthorized'], 401);
         }
 
-        $rows = DemoBooking::where('user_id', $user->id)
-            ->orWhere('email', $user->email ?? '')
+        DemoBookingClaimLogic::claimForUser($user, $request->query('demo_token') ?: $request->input('demo_token'));
+
+        $email = trim((string) ($user->email ?? ''));
+        $rows = DemoBooking::query()
+            ->with('assignedMentors')
+            ->where(function ($q) use ($user, $email) {
+                $q->where('user_id', $user->id);
+                if ($email !== '') {
+                    $q->orWhere('email', $email);
+                }
+            })
             ->orderByDesc('created_at')
             ->limit(50)
             ->get();
 
-        return response()->json(['ok' => true, 'bookings' => $rows]);
+        $bookingsByMentor = MentorBooking::query()
+            ->with('service')
+            ->where('mentee_user_id', $user->id)
+            ->orderByDesc('id')
+            ->get()
+            ->groupBy('mentor_id');
+
+        $payload = $rows->map(function (DemoBooking $booking) use ($bookingsByMentor) {
+            $mentors = $booking->assignedMentors->map(function ($mentor) use ($bookingsByMentor) {
+                $paidBookings = ($bookingsByMentor->get($mentor->id) ?? collect())->map(function (MentorBooking $b) {
+                    return [
+                        'id' => $b->id,
+                        'title' => optional($b->service)->title,
+                        'amount' => $b->amount,
+                        'payment_status' => $b->payment_status,
+                        'status' => $b->status,
+                        'preferred_date' => optional($b->preferred_date)->toDateString(),
+                    ];
+                })->values();
+
+                return [
+                    'id' => $mentor->id,
+                    'display_name' => $mentor->display_name,
+                    'username' => $mentor->username,
+                    'headline' => $mentor->headline,
+                    'photo_url' => MentorImageService::apiPhotoUrl($mentor),
+                    'profile_url' => $mentor->username
+                        ? ('https://www.mentorkhoj.com/mentor/' . $mentor->username)
+                        : null,
+                    'paid_session_done' => (bool) $mentor->pivot->paid_session_done,
+                    'paid_bookings' => $paidBookings,
+                ];
+            })->values();
+
+            return [
+                'id' => $booking->id,
+                'booking_ref' => $booking->booking_ref,
+                'category' => $booking->category,
+                'category_label' => $booking->category_label ?: $booking->demoProgramLabel(),
+                'status' => $booking->status,
+                'assigned_mentors' => $mentors,
+            ];
+        })->values();
+
+        return response()->json(['ok' => true, 'bookings' => $payload]);
     }
 }

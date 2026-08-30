@@ -2,6 +2,8 @@
 
 namespace App\CentralLogics;
 
+use App\Model\Invoice\InvoiceSetting;
+
 class InvoiceCalculationLogic
 {
     /**
@@ -11,6 +13,8 @@ class InvoiceCalculationLogic
     public static function calculate(array $items, array $options = []): array
     {
         $taxMode = (string) ($options['tax_mode'] ?? 'none');
+        $defaultTaxRate = (float) ($options['default_tax_rate'] ?? InvoiceSetting::instance()->default_tax_rate ?? 18);
+        $items = static::normalizeItemTaxRates($items, $taxMode, $defaultTaxRate);
         $placeOfSupply = trim((string) ($options['place_of_supply'] ?? ''));
         $companyState = trim((string) InvoiceCompanyProfile::get('state', 'Bihar'));
         $additionalCharges = round((float) ($options['additional_charges'] ?? 0), 2);
@@ -24,7 +28,7 @@ class InvoiceCalculationLogic
         $totalTax = 0.0;
 
         foreach ($items as $index => $item) {
-            $line = static::calculateLine($item, $index);
+            $line = static::calculateLine($item, $index, $taxMode);
             $computedItems[] = $line;
             $subtotal += $line['line_subtotal'];
             $discountTotal += $line['line_discount'];
@@ -37,14 +41,21 @@ class InvoiceCalculationLogic
         $taxableAmount = round($taxableAmount, 2);
         $totalTax = round($totalTax, 2);
 
+        if ($taxMode === 'none') {
+            $totalTax = 0.0;
+            foreach ($computedItems as &$line) {
+                $line['tax_amount'] = 0.0;
+                $line['line_total'] = $line['line_taxable'];
+            }
+            unset($line);
+        }
+
         $cgst = 0.0;
         $sgst = 0.0;
         $igst = 0.0;
         $otherTax = 0.0;
 
-        if ($taxMode === 'none') {
-            $totalTax = 0.0;
-        } elseif ($taxMode === 'igst') {
+        if ($taxMode === 'igst') {
             $igst = $totalTax;
         } elseif ($taxMode === 'cgst_sgst' || ($taxMode === 'gst' && static::isSameState($placeOfSupply, $companyState))) {
             $cgst = round($totalTax / 2, 2);
@@ -53,7 +64,7 @@ class InvoiceCalculationLogic
             $igst = $totalTax;
         } elseif ($taxMode === 'custom') {
             $otherTax = $totalTax;
-        } else {
+        } elseif ($taxMode !== 'none') {
             $cgst = round($totalTax / 2, 2);
             $sgst = round($totalTax - $cgst, 2);
         }
@@ -75,6 +86,7 @@ class InvoiceCalculationLogic
             'subtotal' => $subtotal,
             'discount_total' => $discountTotal,
             'taxable_amount' => $taxableAmount,
+            'total_tax' => $totalTax,
             'cgst' => $cgst,
             'sgst' => $sgst,
             'igst' => $igst,
@@ -91,13 +103,17 @@ class InvoiceCalculationLogic
      * @param array<string, mixed> $item
      * @return array<string, mixed>
      */
-    public static function calculateLine(array $item, int $sortOrder = 0): array
+    public static function calculateLine(array $item, int $sortOrder = 0, ?string $taxMode = null): array
     {
         $qty = max(0, (float) ($item['quantity'] ?? 1));
         $unitPrice = max(0, (float) ($item['unit_price'] ?? 0));
         $discount = max(0, (float) ($item['discount'] ?? 0));
         $discountType = (string) ($item['discount_type'] ?? 'fixed');
         $taxRate = max(0, (float) ($item['tax_rate'] ?? 0));
+
+        if ($taxMode === 'none') {
+            $taxRate = 0.0;
+        }
 
         $lineSubtotal = round($qty * $unitPrice, 2);
         $lineDiscount = $discountType === 'percent'
@@ -150,5 +166,26 @@ class InvoiceCalculationLogic
         }
 
         return (bool) preg_match('/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/', strtoupper(trim($gstin)));
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $items
+     * @return array<int, array<string, mixed>>
+     */
+    public static function normalizeItemTaxRates(array $items, string $taxMode, ?float $defaultRate = null): array
+    {
+        if ($taxMode === 'none') {
+            return $items;
+        }
+
+        $defaultRate = $defaultRate ?? (float) (InvoiceSetting::instance()->default_tax_rate ?? 18);
+
+        foreach ($items as $index => $item) {
+            if ((float) ($item['tax_rate'] ?? 0) <= 0) {
+                $items[$index]['tax_rate'] = $defaultRate;
+            }
+        }
+
+        return $items;
     }
 }

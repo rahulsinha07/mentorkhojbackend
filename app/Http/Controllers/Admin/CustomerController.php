@@ -4,9 +4,17 @@ namespace App\Http\Controllers\Admin;
 
 use App\CentralLogics\AccountTypeLogic;
 use App\CentralLogics\CustomerBookingStats;
+use App\CentralLogics\CustomerProfileSync;
 use App\CentralLogics\Helpers;
+use App\CentralLogics\MentorBookingMailLogic;
+use App\CentralLogics\SessionCreditLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Conversation;
+use App\Model\DemoBooking;
+use App\Model\Mentor\Mentor;
+use App\Model\Mentor\MentorBooking;
+use App\Model\Mentor\MentorSessionCredit;
+use App\Model\SessionChatMessage;
 use App\Model\Newsletter;
 use App\Model\Order;
 use App\User;
@@ -19,7 +27,6 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -43,28 +50,56 @@ class CustomerController extends Controller
     {
         $queryParam = [];
         $search = $request['search'];
-        $baseQuery = CustomerBookingStats::applyListAggregates(
-            $this->user->with(['mentorProfile'])
-        );
+        $type = $request->query('type', 'student') === 'mentor' ? 'mentor' : 'student';
+        $queryParam['type'] = $type;
 
-        if($request->has('search'))
-        {
+        $baseQuery = CustomerBookingStats::applyListAggregates(
+            $this->user->with(['mentorProfile']),
+            $type
+        );
+        $this->applyAccountTypeFilter($baseQuery, $type);
+
+        if ($request->has('search')) {
             $key = explode(' ', $request['search']);
             $customers = $baseQuery->where(function ($q) use ($key) {
-                        foreach ($key as $value) {
-                            $q->orWhere('f_name', 'like', "%{$value}%")
-                                ->orWhere('l_name', 'like', "%{$value}%")
-                                ->orWhere('phone', 'like', "%{$value}%")
-                                ->orWhere('email', 'like', "%{$value}%");
-                        }
+                foreach ($key as $value) {
+                    $q->orWhere('f_name', 'like', "%{$value}%")
+                        ->orWhere('l_name', 'like', "%{$value}%")
+                        ->orWhere('phone', 'like', "%{$value}%")
+                        ->orWhere('email', 'like', "%{$value}%");
+                }
             });
-            $queryParam = ['search' => $request['search']];
-        }else{
+            $queryParam['search'] = $request['search'];
+        } else {
             $customers = $baseQuery;
         }
         $customers = $customers->latest()->paginate(Helpers::getPagination())->appends($queryParam);
 
-        return view('admin-views.customer.list', compact('customers','search'));
+        $tabCounts = [
+            'student' => $this->user->newQuery()
+                ->where(function ($q) {
+                    $q->where('account_type', 'mentee')->orWhereNull('account_type');
+                })
+                ->count(),
+            'mentor' => $this->user->newQuery()->where('account_type', 'mentor')->count(),
+        ];
+
+        return view('admin-views.customer.list', compact('customers', 'search', 'type', 'tabCounts'));
+    }
+
+    /**
+     * Filter customers to mentor or student (mentee) tab.
+     */
+    protected function applyAccountTypeFilter($query, string $type): void
+    {
+        if ($type === 'mentor') {
+            $query->where('account_type', 'mentor');
+            return;
+        }
+
+        $query->where(function ($q) {
+            $q->where('account_type', 'mentee')->orWhereNull('account_type');
+        });
     }
 
     /**
@@ -76,6 +111,9 @@ class CustomerController extends Controller
     {
         $customer = $this->user->find($id);
         if (isset($customer)) {
+            CustomerProfileSync::syncFromDemoBookings($customer);
+            $customer->refresh();
+
             $queryParam = [];
             $search = $request['search'];
             if($request->has('search'))
@@ -96,9 +134,192 @@ class CustomerController extends Controller
             $customer->load('mentorProfile');
             $bookingStats = CustomerBookingStats::forUser((int) $id);
 
-            return view('admin-views.customer.customer-view', compact('customer', 'orders', 'search', 'bookingStats'));
+            $mentorBookings = MentorBooking::with(['mentor', 'service'])
+                ->where('mentee_user_id', $id)
+                ->latest()
+                ->paginate(Helpers::getPagination(), ['*'], 'sessions_page');
+
+            $demoBookings = DemoBooking::query()
+                ->where(function ($q) use ($id, $customer) {
+                    $q->where('user_id', $id);
+                    if ($customer->email) {
+                        $q->orWhere('email', $customer->email);
+                    }
+                })
+                ->orderByDesc('created_at')
+                ->get();
+
+            $sessionChatMessages = SessionChatMessage::query()
+                ->with(['mentee', 'mentor'])
+                ->where('mentee_user_id', $id)
+                ->orderByDesc('id')
+                ->limit(200)
+                ->get();
+
+            $sessionCredits = MentorSessionCredit::with('mentor')
+                ->where('mentee_user_id', $id)
+                ->orderByDesc('updated_at')
+                ->get();
+            $creditsRemainingTotal = $sessionCredits->sum(fn (MentorSessionCredit $c) => $c->remaining());
+
+            $activeMentors = Mentor::query()
+                ->where('status', 'active')
+                ->orderBy('display_name')
+                ->get(['id', 'display_name', 'username']);
+
+            return view('admin-views.customer.customer-view', compact(
+                'customer',
+                'orders',
+                'search',
+                'bookingStats',
+                'mentorBookings',
+                'demoBookings',
+                'sessionChatMessages',
+                'sessionCredits',
+                'creditsRemainingTotal',
+                'activeMentors'
+            ));
         }
         Toastr::error(translate('Customer not found!'));
+        return back();
+    }
+
+    public function storeSessionCredits(Request $request, int $id): RedirectResponse
+    {
+        $validated = $request->validate([
+            'mentor_id' => 'required|integer|exists:mentors,id',
+            'credits' => 'required|integer|min:1|max:500',
+            'notes' => 'nullable|string|max:2000',
+        ]);
+
+        $customer = $this->user->findOrFail($id);
+        $mentor = Mentor::findOrFail($validated['mentor_id']);
+
+        try {
+            SessionCreditLogic::grant(
+                $customer,
+                $mentor,
+                (int) $validated['credits'],
+                auth('admin')->id(),
+                $validated['notes'] ?? null
+            );
+            Toastr::success(translate('Session credits added'));
+        } catch (\Throwable $e) {
+            Toastr::error($e->getMessage());
+        }
+
+        return back();
+    }
+
+    public function scheduleFromCredits(Request $request, int $id): RedirectResponse
+    {
+        $validated = $request->validate([
+            'credit_id' => 'required|integer|exists:mentor_session_credits,id',
+            'mode' => 'required|in:one_off,daily,weekly',
+            'start_date' => 'required|date',
+            'start_time' => 'required|string|max:32',
+            'count' => 'nullable|integer|min:1|max:52',
+            'mentor_service_id' => 'nullable|integer',
+            'mentee_note' => 'nullable|string|max:2000',
+        ]);
+
+        $credit = MentorSessionCredit::where('id', $validated['credit_id'])
+            ->where('mentee_user_id', $id)
+            ->firstOrFail();
+
+        try {
+            $bookings = SessionCreditLogic::scheduleSessions($credit, $validated);
+            foreach ($bookings as $booking) {
+                MentorBookingMailLogic::sendScheduleConfirmedNotify($booking->fresh(['mentor.user', 'service', 'mentee']), true);
+            }
+            Toastr::success(translate('Scheduled').' '.$bookings->count().' '.translate('session(s)'));
+        } catch (\Throwable $e) {
+            Toastr::error($e->getMessage());
+        }
+
+        return back();
+    }
+
+    public function completeBooking(int $id): RedirectResponse
+    {
+        $booking = MentorBooking::findOrFail($id);
+
+        try {
+            SessionCreditLogic::markComplete($booking);
+            Toastr::success(translate('Session marked complete'));
+        } catch (\Throwable $e) {
+            Toastr::error($e->getMessage());
+        }
+
+        return back();
+    }
+
+    public function rescheduleBooking(Request $request, int $id): RedirectResponse
+    {
+        $validated = $request->validate([
+            'preferred_date' => 'required|date',
+            'preferred_time' => 'required|string|max:32',
+        ]);
+
+        $booking = MentorBooking::with(['mentor.user', 'service', 'mentee'])->findOrFail($id);
+        if (!SessionCreditLogic::canReschedule($booking)) {
+            Toastr::error(translate('Only upcoming sessions can be rescheduled'));
+            return back();
+        }
+
+        $timeRaw = (string) $validated['preferred_time'];
+        $time = strlen($timeRaw) === 5 ? $timeRaw.':00' : $timeRaw;
+        try {
+            $when = \Carbon\Carbon::parse($validated['preferred_date'].' '.$time);
+        } catch (\Throwable $e) {
+            Toastr::error(translate('Invalid date or time'));
+            return back();
+        }
+        if ($when->lt(now()->subMinute())) {
+            Toastr::error(translate('Choose a date and time from now onward'));
+            return back();
+        }
+
+        $alreadyNotified = (bool) $booking->schedule_notify_sent_at;
+        $booking->preferred_date = $validated['preferred_date'];
+        $booking->preferred_time = $time;
+        if ($booking->status === 'requested') {
+            $booking->status = 'confirmed';
+        }
+        if (\Illuminate\Support\Facades\Schema::hasColumn('mentor_bookings', 'session_reminder_24h_sent_at')) {
+            $booking->session_reminder_24h_sent_at = null;
+        }
+        $booking->save();
+        MentorBookingMailLogic::sendScheduleConfirmedNotify($booking, true);
+
+        Toastr::success(translate('Session rescheduled'));
+        return back();
+    }
+
+    public function sendPaymentReminder(Request $request, int $id): RedirectResponse
+    {
+        $validated = $request->validate([
+            'payment_link' => 'nullable|url|max:2000',
+        ]);
+
+        $booking = MentorBooking::with(['mentor', 'service', 'mentee'])->findOrFail($id);
+
+        if (!in_array($booking->payment_status, ['pending', 'failed'], true)) {
+            Toastr::error(translate('Payment is not pending for this booking'));
+            return back();
+        }
+
+        $sent = MentorBookingMailLogic::sendPaymentReminderEmail(
+            $booking,
+            $validated['payment_link'] ?? null
+        );
+
+        if ($sent) {
+            Toastr::success(translate('Payment reminder email sent'));
+        } else {
+            Toastr::error(translate('Failed to send payment reminder email'));
+        }
+
         return back();
     }
 
@@ -263,12 +484,15 @@ class CustomerController extends Controller
     public function exportCustomer(Request $request): StreamedResponse|string
     {
         $storage = [];
-        $queryParam = [];
         $search = $request['search'];
+        $type = $request->query('type', 'student') === 'mentor' ? 'mentor' : 'student';
 
         $customers = CustomerBookingStats::applyListAggregates(
-            $this->user->with('mentorProfile')
-        )->when($request->has('search'), function ($query) use ($request) {
+            $this->user->with('mentorProfile'),
+            $type
+        );
+        $this->applyAccountTypeFilter($customers, $type);
+        $customers = $customers->when($request->has('search'), function ($query) use ($request) {
                 $key = explode(' ', $request['search']);
                 $query->where(function ($q) use ($key) {
                     foreach ($key as $value) {
@@ -293,10 +517,10 @@ class CustomerController extends Controller
                 'last_login_portal' => AccountTypeLogic::loginPortalLabel($customer->last_login_as ?? null),
                 'last_login_at' => $customer->last_login_at?->format('Y-m-d H:i'),
                 'login_method' => AccountTypeLogic::loginMediumLabel($customer->login_medium ?? null),
-                'total_bookings' => (int) ($customer->bookings_count ?? 0),
-                'total_booking_amount' => (float) ($customer->bookings_amount ?? 0),
+                'total_sessions' => (int) ($customer->bookings_count ?? 0),
+                'total_session_amount' => (float) ($customer->bookings_amount ?? 0),
             ];
         }
-        return (new FastExcel($storage))->download('customers.xlsx');
+        return (new FastExcel($storage))->download('customers-'.$type.'.xlsx');
     }
 }

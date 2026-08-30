@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\CentralLogics\AccountTypeLogic;
+use App\CentralLogics\DemoBookingClaimLogic;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\OtpDelivery;
 use App\CentralLogics\SMS_module;
@@ -72,6 +73,8 @@ class CustomerAuthController extends Controller
             'referred_by' => $refer_user->id ?? null,
             'account_type' => AccountTypeLogic::accountTypeForRegistration($request->input('login_as')),
         ]);
+
+        DemoBookingClaimLogic::claimForUser($user, $request->input('demo_token'));
 
         $phoneVerification = Helpers::get_business_settings('phone_verification');
         $emailVerification = Helpers::get_business_settings('email_verification');
@@ -509,6 +512,8 @@ class CustomerAuthController extends Controller
                 $user->updated_at = now();
                 $user->language_code = $request->header('X-localization');
                 $user->save();
+
+                DemoBookingClaimLogic::claimForUser($user, $request->input('demo_token'));
 
                 return response()->json(['token' => $token, 'status' => true], 200);
 

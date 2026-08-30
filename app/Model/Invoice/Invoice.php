@@ -32,6 +32,8 @@ class Invoice extends Model
         'amount_paid' => 'float',
         'balance_due' => 'float',
         'invoice_number_manual' => 'boolean',
+        'classes_booked' => 'integer',
+        'mentor_snapshot' => 'array',
     ];
 
     protected $fillable = [
@@ -65,6 +67,9 @@ class Invoice extends Model
         'shipping_postal_code',
         'customer_gstin',
         'customer_pan',
+        'customer_aadhaar',
+        'classes_booked',
+        'mentor_snapshot',
         'customer_external_id',
         'subtotal',
         'discount_total',

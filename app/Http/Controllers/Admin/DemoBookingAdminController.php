@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\CentralLogics\DemoBookingClaimLogic;
 use App\Model\DemoBooking;
+use App\Model\SessionChatMessage;
+use App\Services\DemoBookingMailService;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Response;
@@ -24,7 +27,7 @@ class DemoBookingAdminController extends Controller
     public function index(Request $request)
     {
         $vertical = strtolower((string) $request->query('vertical', ''));
-        $query = DemoBooking::query()->orderByDesc('created_at');
+        $query = DemoBooking::query()->with('assignedMentors')->orderByDesc('created_at');
 
         if ($vertical && isset(self::VERTICALS[$vertical])) {
             $this->applyVerticalFilter($query, $vertical);
@@ -65,13 +68,120 @@ class DemoBookingAdminController extends Controller
 
     public function show(int $id)
     {
-        $booking = DemoBooking::findOrFail($id);
+        $booking = DemoBooking::with('assignedMentors')->findOrFail($id);
+        $assignedIds = $booking->assignedMentors->pluck('id')->all();
+        $publishedMentors = DemoBookingClaimLogic::eligiblePublishedMentors($booking);
+        $verticalKey = $this->detectVertical($booking);
+
+        $mentorIds = $booking->assignedMentors->pluck('id');
+        $sessionChatMessages = SessionChatMessage::query()
+            ->with(['mentee', 'mentor'])
+            ->where(function ($q) use ($booking, $mentorIds) {
+                $q->where('demo_booking_id', $booking->id);
+                if ($booking->user_id && $mentorIds->isNotEmpty()) {
+                    $q->orWhere(function ($inner) use ($booking, $mentorIds) {
+                        $inner->where('mentee_user_id', $booking->user_id)
+                            ->whereIn('mentor_id', $mentorIds);
+                    });
+                }
+            })
+            ->orderBy('id')
+            ->limit(300)
+            ->get();
 
         return view('admin-views.demo-bookings.show', [
             'booking' => $booking,
             'statuses' => DemoBooking::statuses(),
-            'verticalKey' => $this->detectVertical($booking),
+            'verticalKey' => $verticalKey,
+            'publishedMentors' => $publishedMentors,
+            'assignedIds' => $assignedIds,
+            'mentorFilterLabel' => self::VERTICALS[$verticalKey] ?? ($booking->category_label ?: $booking->category ?: 'this category'),
+            'sessionChatMessages' => $sessionChatMessages,
         ]);
+    }
+
+    public function storeMentors(Request $request, int $id, DemoBookingMailService $mail)
+    {
+        $booking = DemoBooking::findOrFail($id);
+        $data = $request->validate([
+            'mentor_ids' => 'required|array|min:1',
+            'mentor_ids.*' => 'integer|exists:mentors,id',
+        ]);
+
+        DemoBookingClaimLogic::ensureInviteToken($booking);
+
+        $existing = $booking->assignedMentors()->pluck('mentors.id')->all();
+        $existing = array_map('intval', $existing);
+        $toAttach = [];
+        foreach (array_unique($data['mentor_ids']) as $mentorId) {
+            $mentorId = (int) $mentorId;
+            if (in_array($mentorId, $existing, true)) {
+                continue;
+            }
+            if (!DemoBookingClaimLogic::mentorIsEligible($booking, $mentorId)) {
+                continue;
+            }
+            $toAttach[$mentorId] = [
+                'assigned_at' => now(),
+                'paid_session_done' => false,
+            ];
+        }
+
+        if ($toAttach) {
+            $booking->assignedMentors()->attach($toAttach);
+            $mailStatus = $mail->sendMentorAssignedEmail($booking);
+            if ($mailStatus === 'success') {
+                foreach (array_keys($toAttach) as $mentorId) {
+                    $booking->assignedMentors()->updateExistingPivot($mentorId, [
+                        'assignment_email_sent_at' => now(),
+                    ]);
+                }
+            }
+            $message = count($toAttach) . ' mentor(s) assigned.';
+            if ($mailStatus === 'success') {
+                $message .= ' Student email sent (Mentorkhoj copied).';
+            } elseif ($mailStatus === 'no_email') {
+                $message .= ' No student email on this lead — email not sent.';
+            } else {
+                $message .= ' Email failed — check logs.';
+            }
+        } else {
+            $message = 'No new in-category mentors were assigned. Pick mentors that match this demo category.';
+        }
+
+        return redirect()
+            ->route('admin.demo-bookings.show', $booking->id)
+            ->with('success', $message);
+    }
+
+    public function destroyMentor(int $id, int $mentorId)
+    {
+        $booking = DemoBooking::findOrFail($id);
+        $booking->assignedMentors()->detach($mentorId);
+
+        return redirect()
+            ->route('admin.demo-bookings.show', $booking->id)
+            ->with('success', 'Mentor removed from this demo.');
+    }
+
+    public function updatePaid(Request $request, int $id)
+    {
+        $booking = DemoBooking::findOrFail($id);
+        $paid = $request->input('paid_done', []);
+        if (!is_array($paid)) {
+            $paid = [];
+        }
+
+        foreach ($booking->assignedMentors()->pluck('mentors.id') as $mentorId) {
+            $done = !empty($paid[$mentorId]);
+            $booking->assignedMentors()->updateExistingPivot((int) $mentorId, [
+                'paid_session_done' => $done,
+            ]);
+        }
+
+        return redirect()
+            ->route('admin.demo-bookings.show', $booking->id)
+            ->with('success', 'Paid session status saved.');
     }
 
     public function update(Request $request, int $id)

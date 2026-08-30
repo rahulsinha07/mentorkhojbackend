@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, shrink-to-fit=no, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>@yield('title')</title>
@@ -22,7 +22,7 @@
         src="{{asset('public/assets/admin')}}/vendor/hs-navbar-vertical-aside/hs-navbar-vertical-aside-mini-cache.js"></script>
     <link rel="stylesheet" href="{{asset('public/assets/admin')}}/css/toastr.css">
     <link rel="stylesheet" href="{{asset('public/assets/admin')}}/css/custom-helper.css">
-    <link rel="stylesheet" href="{{asset('public/assets/admin')}}/css/mobile-admin.css?v=1.0">
+    <link rel="stylesheet" href="{{asset('public/assets/admin')}}/css/mobile-admin.css?v=20260826b">
 </head>
 
 <body class="footer-offset">
@@ -133,30 +133,44 @@
             return window.innerWidth < 1200;
         }
 
+        function forceMobileSidebarClosed() {
+            if (!isMobileAdminNav()) {
+                return;
+            }
+            // Do not .trigger('click') — overlay itself is also a toggle invoker.
+            // Just ensure closed state so links/WhatsApp receive taps.
+            $('body').addClass('navbar-vertical-aside-closed-mode');
+            $('body').removeClass('navbar-vertical-aside-transition-on');
+        }
+
+        // Start with drawer closed on phones so content taps reach WhatsApp/links
+        forceMobileSidebarClosed();
+        setTimeout(forceMobileSidebarClosed, 50);
+        setTimeout(forceMobileSidebarClosed, 300);
+
         $('.js-navbar-vertical-aside .nav-link[href]').on('click', function () {
             if (!isMobileAdminNav() || $(this).hasClass('nav-link-toggle')) {
                 return;
             }
-            setTimeout(function () {
-                if (!$('body').hasClass('navbar-vertical-aside-closed-mode')) {
-                    $('.navbar-brand-wrapper .js-navbar-vertical-aside-toggle-invoker').trigger('click');
-                }
-            }, 150);
+            setTimeout(forceMobileSidebarClosed, 150);
         });
 
-        // Mobile: close sidebar when tapping overlay
-        $(document).on('click', '.navbar-vertical-aside-mobile-overlay', function () {
-            if (isMobileAdminNav() && !$('body').hasClass('navbar-vertical-aside-closed-mode')) {
-                $('.navbar-brand-wrapper .js-navbar-vertical-aside-toggle-invoker').trigger('click');
+        // Mobile: tapping the dim overlay only CLOSES the drawer
+        $(document).on('click', '.navbar-vertical-aside-mobile-overlay', function (e) {
+            if (!isMobileAdminNav()) {
+                return;
             }
+            e.preventDefault();
+            e.stopPropagation();
+            forceMobileSidebarClosed();
         });
 
         // Close drawer when crossing down to mobile width
         var wasMobileAdminNav = isMobileAdminNav();
         $(window).on('resize', function () {
             var mobileNow = isMobileAdminNav();
-            if (mobileNow && !wasMobileAdminNav && !$('body').hasClass('navbar-vertical-aside-closed-mode')) {
-                $('.navbar-brand-wrapper .js-navbar-vertical-aside-toggle-invoker').trigger('click');
+            if (mobileNow && !wasMobileAdminNav) {
+                forceMobileSidebarClosed();
             }
             wasMobileAdminNav = mobileNow;
         });
