@@ -10,6 +10,13 @@
     $customItem = empty($selectedMentorId) && !empty($item['service_name'] ?? '');
     $unitValue = $item['unit'] ?? 'Session';
     $serviceNameValue = $item['service_name'] ?? '';
+    $rateValue = isset($item['unit_price']) && $item['unit_price'] !== '' ? (float) $item['unit_price'] : null;
+    if ($rateValue !== null && ($rateValue <= 0 || $rateValue > 100000)) {
+        $rateValue = null;
+    }
+    if ($rateValue === null && $selectedMentorId) {
+        $rateValue = optional($mentors->firstWhere('id', $selectedMentorId))->default_price ?: null;
+    }
     if ($selectedMentorId && $serviceNameValue === '') {
         $serviceNameValue = optional($mentors->firstWhere('id', $selectedMentorId))->display_name ?? '';
     }
@@ -43,7 +50,7 @@
     <td class="col-desc"><input type="text" name="items[{{ $index }}][description]" class="form-control form-control-sm item-description" value="{{ $item['description'] ?? '' }}"></td>
     <td class="col-sessions"><input type="number" step="1" min="1" name="items[{{ $index }}][quantity]" class="form-control form-control-sm item-qty item-sessions" value="{{ (int) ($item['quantity'] ?? 1) }}" title="{{ translate('Number of sessions') }}"></td>
     <td class="col-unit"><input type="text" name="items[{{ $index }}][unit]" class="form-control form-control-sm item-unit" value="{{ $unitValue }}" placeholder="Session"></td>
-    <td class="col-rate"><input type="number" step="0.01" min="0" name="items[{{ $index }}][unit_price]" class="form-control form-control-sm item-rate" value="{{ old('items.'.$index.'.unit_price', $item['unit_price'] ?? '') }}" placeholder="250" inputmode="decimal"></td>
+    <td class="col-rate"><input type="number" step="0.01" min="0" max="100000" name="items[{{ $index }}][unit_price]" class="form-control form-control-sm item-rate" value="{{ old('items.'.$index.'.unit_price', $rateValue !== null ? $rateValue : '') }}" placeholder="250" inputmode="decimal"></td>
     <td class="col-disc"><input type="number" step="0.01" min="0" name="items[{{ $index }}][discount]" class="form-control form-control-sm item-discount" value="{{ $item['discount'] ?? 0 }}"></td>
     <td class="col-disc-type">
         <select name="items[{{ $index }}][discount_type]" class="form-control form-control-sm item-discount-type">

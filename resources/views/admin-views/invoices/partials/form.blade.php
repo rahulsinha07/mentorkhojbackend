@@ -36,6 +36,22 @@
             ];
         });
     $mentorSiteUrl = rtrim((string) config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
+    foreach ($items as $idx => $item) {
+        $items[$idx]['quantity'] = max(1, min(9999, (int) ($item['quantity'] ?? 1)));
+        $rate = (float) ($item['unit_price'] ?? 0);
+        if ($rate <= 0 || $rate > 100000) {
+            $mentorId = $item['mentor_id'] ?? null;
+            if (!$mentorId && !empty($item['sku']) && ctype_digit((string) $item['sku'])) {
+                $mentorId = (int) $item['sku'];
+            }
+            $mentor = $mentorId ? $mentors->firstWhere('id', $mentorId) : null;
+            $fallback = $mentor && ($mentor->default_price ?? 0) > 0 ? (float) $mentor->default_price : null;
+            $items[$idx]['unit_price'] = $fallback ?? ($rate > 0 && $rate <= 100000 ? $rate : '');
+        }
+        if (empty($item['unit'])) {
+            $items[$idx]['unit'] = 'Session';
+        }
+    }
     $mentorsJson = $mentors->map(function ($m) {
         return [
             'id' => $m->id,
@@ -362,5 +378,5 @@
         mentorkhojSiteUrl: @json($mentorSiteUrl),
     };
 </script>
-<script src="{{ asset('public/assets/admin/js/invoice-form.js') }}?v=10"></script>
+<script src="{{ asset('public/assets/admin/js/invoice-form.js') }}?v=11"></script>
 @endpush

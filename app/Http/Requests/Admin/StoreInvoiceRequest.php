@@ -52,6 +52,12 @@ class StoreInvoiceRequest extends FormRequest
                 if (!isset($item['unit_price']) || $item['unit_price'] === '') {
                     $items[$index]['unit_price'] = 0;
                 }
+                $qty = (int) ($items[$index]['quantity'] ?? 1);
+                $items[$index]['quantity'] = max(1, min(9999, $qty));
+                $rate = (float) ($items[$index]['unit_price'] ?? 0);
+                if ($rate > 100000) {
+                    $items[$index]['unit_price'] = 100000;
+                }
             }
             $this->merge(['items' => $items]);
         }
@@ -118,9 +124,9 @@ class StoreInvoiceRequest extends FormRequest
             'items.*.service_name' => 'required|string|max:191',
             'items.*.description' => 'nullable|string|max:2000',
             'items.*.sku' => 'nullable|string|max:64',
-            'items.*.quantity' => 'required|numeric|gt:0',
+            'items.*.quantity' => 'required|numeric|min:1|max:9999',
             'items.*.unit' => 'nullable|string|max:32',
-            'items.*.unit_price' => 'required|numeric|min:0.01',
+            'items.*.unit_price' => 'required|numeric|min:0.01|max:100000',
             'items.*.discount' => 'nullable|numeric|min:0',
             'items.*.discount_type' => 'nullable|in:fixed,percent',
             'items.*.tax_rate' => 'nullable|numeric|min:0|max:100',

@@ -36,13 +36,55 @@
     function prepareRowsForCalc() {
         syncTaxRatesForMode();
         itemsBody.querySelectorAll('.item-row').forEach(function (row) {
-            applyMentorSelection(row, true, true);
+            syncMentorFromSku(row);
+            applyMentorSelection(row, true, shouldFillRate(row));
+            sanitizeRowNumbers(row);
         });
     }
 
     function parseNum(value, fallback) {
-        var n = parseFloat(value);
+        var n = parseFloat(String(value).replace(/,/g, ''));
         return isNaN(n) ? (fallback || 0) : n;
+    }
+
+    function parseQty(value) {
+        var n = parseInt(String(value).replace(/\D/g, ''), 10);
+        if (isNaN(n) || n < 1) return 1;
+        return Math.min(n, 9999);
+    }
+
+    function isRateInvalid(rate) {
+        return rate <= 0 || rate > 100000;
+    }
+
+    function syncMentorFromSku(row) {
+        var select = row.querySelector('.item-mentor-select');
+        var sku = row.querySelector('.item-sku');
+        if (!select || !sku || !sku.value) return;
+        if (!select.value && /^\d+$/.test(String(sku.value))) {
+            var exists = select.querySelector('option[value="' + sku.value + '"]');
+            if (exists) select.value = sku.value;
+        }
+    }
+
+    function sanitizeRowNumbers(row) {
+        var qtyInput = row.querySelector('.item-qty');
+        var rateInput = row.querySelector('.item-rate');
+        if (qtyInput) qtyInput.value = String(parseQty(qtyInput.value));
+        if (!rateInput) return;
+        var rate = parseNum(rateInput.value, 0);
+        if (isRateInvalid(rate)) {
+            var select = row.querySelector('.item-mentor-select');
+            var meta = select && select.value ? getMentorMeta(select.value) : null;
+            var fallback = meta && parseNum(meta.default_price, 0) > 0 ? parseNum(meta.default_price, 0) : 0;
+            rateInput.value = fallback > 0 ? String(fallback) : '';
+        } else {
+            rateInput.value = String(Math.round(rate * 100) / 100);
+        }
+    }
+
+    function shouldFillRate(row) {
+        return isRateInvalid(parseNum(row.querySelector('.item-rate').value, 0));
     }
 
     function effectiveTaxRate(rawRate, taxMode) {
@@ -152,8 +194,8 @@
         if (skuInput) skuInput.value = val;
         if (unitInput && !unitInput.value.trim()) unitInput.value = 'Session';
 
-        if (rateInput && (forceRate || parseNum(rateInput.value, 0) <= 0) && defaultPrice > 0) {
-            rateInput.value = defaultPrice;
+        if (rateInput && (forceRate || shouldFillRate(row)) && defaultPrice > 0) {
+            rateInput.value = String(defaultPrice);
         }
 
         if (descInput && !keepDescription) {
@@ -182,7 +224,7 @@
             service_name: row.querySelector('.item-service') ? row.querySelector('.item-service').value : '',
             description: row.querySelector('.item-description') ? row.querySelector('.item-description').value : '',
             sku: row.querySelector('.item-sku') ? row.querySelector('.item-sku').value : '',
-            quantity: parseInt(row.querySelector('.item-qty').value, 10) || 1,
+            quantity: parseQty(row.querySelector('.item-qty').value),
             unit: row.querySelector('.item-unit').value || 'Session',
             unit_price: parseNum(row.querySelector('.item-rate').value, 0),
             discount: parseNum(row.querySelector('.item-discount').value, 0),
@@ -239,8 +281,9 @@
     }
 
     function calculateLineLocal(item, taxMode) {
-        var qty = item.quantity || 0;
-        var rate = item.unit_price || 0;
+        var qty = parseQty(item.quantity);
+        var rate = parseNum(item.unit_price, 0);
+        if (isRateInvalid(rate)) rate = 0;
         var disc = item.discount || 0;
         var discType = item.discount_type || 'fixed';
         var taxRate = effectiveTaxRate(item.tax_rate, taxMode);
@@ -357,6 +400,18 @@
         clearTimeout(recalcTimer);
         prepareRowsForCalc();
         setCalcStatus('Calculating…', '');
+
+        var items = gatherItems();
+        var invalidRow = items.findIndex(function (item) {
+            return !item.service_name || isRateInvalid(item.unit_price);
+        });
+        if (invalidRow >= 0) {
+            setCalcStatus('Select mentor and enter rate on each row.', 'danger');
+            itemsBody.querySelectorAll('.item-row').forEach(function (row, idx) {
+                row.querySelector('.item-line-total').textContent = money(0);
+            });
+            return;
+        }
 
         if (!cfg.calculateUrl) {
             recalcLocalFallback();
@@ -536,7 +591,9 @@
 
     itemsBody.querySelectorAll('.item-row').forEach(function (row) {
         bindRowActions(row);
-        applyMentorSelection(row, true, true);
+        syncMentorFromSku(row);
+        applyMentorSelection(row, true, shouldFillRate(row));
+        sanitizeRowNumbers(row);
     });
 
     ['additional_charges', 'amount_paid', 'tax_mode', 'billing_state', 'place_of_supply'].forEach(function (id) {
@@ -718,16 +775,16 @@
         }, 'form-control form-control-sm item-description', item.description || '', 'col-desc'));
 
         row.appendChild(cellInput({
-            type: 'number', step: '1', min: '1', name: 'items[' + idx + '][quantity]'
-        }, 'form-control form-control-sm item-qty item-sessions', parseInt(item.quantity, 10) || 1, 'col-sessions'));
+            type: 'number', step: '1', min: '1', max: '9999', name: 'items[' + idx + '][quantity]'
+        }, 'form-control form-control-sm item-qty item-sessions', parseQty(item.quantity), 'col-sessions'));
 
         row.appendChild(cellInput({
             type: 'text', name: 'items[' + idx + '][unit]'
         }, 'form-control form-control-sm item-unit', item.unit || 'Session', 'col-unit'));
 
         row.appendChild(cellInput({
-            type: 'number', step: '0.01', min: '0', name: 'items[' + idx + '][unit_price]'
-        }, 'form-control form-control-sm item-rate', item.unit_price != null && item.unit_price !== '' ? item.unit_price : '', 'col-rate'));
+            type: 'number', step: '0.01', min: '0', max: '100000', name: 'items[' + idx + '][unit_price]'
+        }, 'form-control form-control-sm item-rate', item.unit_price != null && !isRateInvalid(parseNum(item.unit_price, 0)) ? item.unit_price : '', 'col-rate'));
 
         row.appendChild(cellInput({
             type: 'number', step: '0.01', min: '0', name: 'items[' + idx + '][discount]'
@@ -783,7 +840,9 @@
 
         itemsBody.appendChild(row);
         bindRowActions(row);
-        applyMentorSelection(row, true, true);
+        syncMentorFromSku(row);
+        applyMentorSelection(row, true, shouldFillRate(row));
+        sanitizeRowNumbers(row);
     }
 
     form.addEventListener('submit', function (e) {
@@ -791,7 +850,9 @@
         var messages = [];
         itemsBody.querySelectorAll('.item-row').forEach(function (row) {
             syncCustomServiceName(row);
-            applyMentorSelection(row, true, false);
+            syncMentorFromSku(row);
+            applyMentorSelection(row, true, shouldFillRate(row));
+            sanitizeRowNumbers(row);
             var select = row.querySelector('.item-mentor-select');
             var serviceInput = row.querySelector('.item-service');
             var customInput = row.querySelector('.item-service-custom');
@@ -814,10 +875,10 @@
                 invalid = true;
                 messages.push('Item name missing — re-select the mentor.');
             }
-            if (rateInput && parseNum(rateInput.value, 0) <= 0) {
+            if (rateInput && isRateInvalid(parseNum(rateInput.value, 0))) {
                 invalid = true;
                 rateInput.classList.add('is-invalid');
-                messages.push('Enter rate (₹) per session on each row.');
+                messages.push('Enter a valid rate (₹1–₹100,000) per session on each row.');
             } else if (rateInput) {
                 rateInput.classList.remove('is-invalid');
             }
