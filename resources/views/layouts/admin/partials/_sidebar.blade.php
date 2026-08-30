@@ -49,29 +49,21 @@
                     @if(Helpers::module_permission_check(MANAGEMENT_SECTION['pos_management']))
                             <li class="navbar-vertical-aside-has-menu {{Request::is('admin/pos*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link nav-link-toggle"
-                                   href="javascript:" title="{{translate('POS')}}">
-                                    <i class="tio-shopping nav-icon"></i>
+                                   href="javascript:" title="{{translate('Bookings')}}">
+                                    <i class="tio-calendar-note nav-icon"></i>
                                     <span
-                                        class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{translate('POS')}}</span>
+                                        class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{translate('Bookings')}}</span>
                                 </a>
                                 <ul class="js-navbar-vertical-aside-submenu nav nav-sub"
                                     style="display: {{Request::is('admin/pos*')?'block':'none'}}">
-                                    <li class="nav-item {{Request::is('admin/pos')?'active':''}}">
-                                        <a class="nav-link " href="{{route('admin.pos.index')}}"
-                                           title="{{translate('New Sale')}}">
-                                            <span class="tio-circle nav-indicator-icon"></span>
-                                            <span
-                                                class="text-truncate">{{translate('New Sale')}}</span>
-                                        </a>
-                                    </li>
                                     <li class="nav-item {{Request::is('admin/pos/orders')?'active':''}}">
                                         <a class="nav-link " href="{{route('admin.pos.orders')}}"
-                                           title="{{translate('orders')}}">
+                                           title="{{translate('All Bookings')}}">
                                             <span class="tio-circle nav-indicator-icon"></span>
                                             <span class="text-truncate sidebar--badge-container">
-                                                <span>{{translate('orders')}}</span>
+                                                <span>{{translate('All Bookings')}}</span>
                                                 <span class="badge badge-soft-info badge-pill ml-1">
-                                                    {{\App\Model\Order::Pos()->count()}}
+                                                    {{\App\Model\Mentor\MentorBooking::count() + \App\Model\DemoBooking::count()}}
                                                 </span>
                                             </span>
                                         </a>
@@ -321,6 +313,15 @@
                                     <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{ translate('Mentor list') }}</span>
                                 </a>
                             </li>
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/mentor/session-messages*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.mentor.session-messages')}}"
+                                   title="Session messages"
+                                >
+                                    <i class="tio-chat nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">Session messages</span>
+                                </a>
+                            </li>
                             <li class="navbar-vertical-aside-has-menu {{Request::is('admin/mentor/bookings*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link"
                                    href="{{route('admin.mentor.bookings.list')}}"
@@ -548,6 +549,37 @@
                                         </a>
                                     </li>
                                 </ul>
+                            </li>
+                        @endif
+
+                        @if(Helpers::module_permission_check(MANAGEMENT_SECTION['invoice_management']))
+                            <li class="nav-item">
+                                <small class="nav-subtitle">{{ translate('Invoice Management') }}</small>
+                                <small class="tio-more-horizontal nav-subtitle-replacer"></small>
+                            </li>
+                            <li class="navbar-vertical-aside-has-menu {{ Request::is('admin/invoices') && !Request::is('admin/invoices/list') && !Request::is('admin/invoices/create') && !Request::is('admin/invoices/*/edit') ? 'active' : '' }}">
+                                <a class="nav-link" href="{{ route('admin.invoices.dashboard') }}" title="{{ translate('Invoice Dashboard') }}">
+                                    <i class="tio-receipt nav-icon"></i>
+                                    <span class="text-truncate">{{ translate('Invoice Dashboard') }}</span>
+                                </a>
+                            </li>
+                            <li class="navbar-vertical-aside-has-menu {{ Request::is('admin/invoices/create') ? 'active' : '' }}">
+                                <a class="nav-link" href="{{ route('admin.invoices.create') }}" title="{{ translate('Create Invoice') }}">
+                                    <i class="tio-add-circle nav-icon"></i>
+                                    <span class="text-truncate">{{ translate('Create Invoice') }}</span>
+                                </a>
+                            </li>
+                            <li class="navbar-vertical-aside-has-menu {{ Request::is('admin/invoices/list') || Request::is('admin/invoices/*/edit') || Request::is('admin/invoices/*') && !Request::is('admin/invoices/create') ? 'active' : '' }}">
+                                <a class="nav-link" href="{{ route('admin.invoices.list') }}" title="{{ translate('Invoice History') }}">
+                                    <i class="tio-document-text nav-icon"></i>
+                                    <span class="text-truncate">{{ translate('Invoice History') }}</span>
+                                </a>
+                            </li>
+                            <li class="navbar-vertical-aside-has-menu {{ Request::is('admin/invoice-settings*') ? 'active' : '' }}">
+                                <a class="nav-link" href="{{ route('admin.invoice-settings.edit') }}" title="{{ translate('Invoice Settings') }}">
+                                    <i class="tio-settings nav-icon"></i>
+                                    <span class="text-truncate">{{ translate('Invoice Settings') }}</span>
+                                </a>
                             </li>
                         @endif
 
