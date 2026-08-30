@@ -34,27 +34,40 @@
     }
 
     function prepareRowsForCalc() {
-        syncTaxRatesForMode();
-        itemsBody.querySelectorAll('.item-row').forEach(function (row) {
-            syncMentorFromSku(row);
-            applyMentorSelection(row, true, shouldFillRate(row));
-            sanitizeRowNumbers(row);
-        });
+        itemsBody.querySelectorAll('.item-row').forEach(syncMentorFromSku);
     }
 
     function parseNum(value, fallback) {
+        if (value === '' || value === null || value === undefined) {
+            return fallback != null ? fallback : 0;
+        }
         var n = parseFloat(String(value).replace(/,/g, ''));
-        return isNaN(n) ? (fallback || 0) : n;
+        return isNaN(n) ? (fallback != null ? fallback : 0) : n;
     }
 
-    function parseQty(value) {
-        var n = parseInt(String(value).replace(/\D/g, ''), 10);
-        if (isNaN(n) || n < 1) return 1;
+    function parseQtyForCalc(value) {
+        if (value === '' || value === null || value === undefined) return 0;
+        var n = parseInt(String(value), 10);
+        if (isNaN(n) || n < 0) return 0;
         return Math.min(n, 9999);
+    }
+
+    function parseRateForCalc(value) {
+        if (value === '' || value === null || value === undefined) return 0;
+        var n = parseNum(value, 0);
+        if (n < 0) return 0;
+        if (n > 100000) return 100000;
+        return n;
     }
 
     function isRateInvalid(rate) {
         return rate <= 0 || rate > 100000;
+    }
+
+    function readTaxRate(input, taxMode) {
+        if (taxMode === 'none') return 0;
+        if (!input || input.value === '') return cfg.defaultTaxRate || 18;
+        return Math.max(0, parseNum(input.value, 0));
     }
 
     function syncMentorFromSku(row) {
@@ -67,43 +80,12 @@
         }
     }
 
-    function sanitizeRowNumbers(row) {
-        var qtyInput = row.querySelector('.item-qty');
-        var rateInput = row.querySelector('.item-rate');
-        if (qtyInput) qtyInput.value = String(parseQty(qtyInput.value));
-        if (!rateInput) return;
-        var rate = parseNum(rateInput.value, 0);
-        if (isRateInvalid(rate)) {
-            var select = row.querySelector('.item-mentor-select');
-            var meta = select && select.value ? getMentorMeta(select.value) : null;
-            var fallback = meta && parseNum(meta.default_price, 0) > 0 ? parseNum(meta.default_price, 0) : 0;
-            rateInput.value = fallback > 0 ? String(fallback) : '';
-        } else {
-            rateInput.value = String(Math.round(rate * 100) / 100);
-        }
-    }
-
-    function shouldFillRate(row) {
-        return isRateInvalid(parseNum(row.querySelector('.item-rate').value, 0));
-    }
-
     function effectiveTaxRate(rawRate, taxMode) {
-        if (taxMode === 'none') {
-            return 0;
+        if (taxMode === 'none') return 0;
+        if (rawRate === '' || rawRate === null || rawRate === undefined) {
+            return cfg.defaultTaxRate || 18;
         }
-        var rate = parseNum(rawRate, 0);
-        return rate > 0 ? rate : (cfg.defaultTaxRate || 18);
-    }
-
-    function syncTaxRatesForMode() {
-        if (getTaxMode() === 'none') {
-            return;
-        }
-        itemsBody.querySelectorAll('.item-tax').forEach(function (input) {
-            if (parseNum(input.value, 0) <= 0) {
-                input.value = cfg.defaultTaxRate || 18;
-            }
-        });
+        return Math.max(0, parseNum(rawRate, 0));
     }
 
     function resolveMentorIdFromItem(item) {
@@ -194,7 +176,7 @@
         if (skuInput) skuInput.value = val;
         if (unitInput && !unitInput.value.trim()) unitInput.value = 'Session';
 
-        if (rateInput && (forceRate || shouldFillRate(row)) && defaultPrice > 0) {
+        if (rateInput && forceRate && defaultPrice > 0) {
             rateInput.value = String(defaultPrice);
         }
 
@@ -224,12 +206,12 @@
             service_name: row.querySelector('.item-service') ? row.querySelector('.item-service').value : '',
             description: row.querySelector('.item-description') ? row.querySelector('.item-description').value : '',
             sku: row.querySelector('.item-sku') ? row.querySelector('.item-sku').value : '',
-            quantity: parseQty(row.querySelector('.item-qty').value),
+            quantity: parseQtyForCalc(row.querySelector('.item-qty').value),
             unit: row.querySelector('.item-unit').value || 'Session',
-            unit_price: parseNum(row.querySelector('.item-rate').value, 0),
+            unit_price: parseRateForCalc(row.querySelector('.item-rate').value),
             discount: parseNum(row.querySelector('.item-discount').value, 0),
             discount_type: row.querySelector('.item-discount-type').value,
-            tax_rate: effectiveTaxRate(row.querySelector('.item-tax').value, taxMode),
+            tax_rate: readTaxRate(row.querySelector('.item-tax'), taxMode),
         };
     }
 
@@ -281,12 +263,20 @@
     }
 
     function calculateLineLocal(item, taxMode) {
-        var qty = parseQty(item.quantity);
-        var rate = parseNum(item.unit_price, 0);
-        if (isRateInvalid(rate)) rate = 0;
-        var disc = item.discount || 0;
+        var qty = parseQtyForCalc(item.quantity);
+        var rate = parseRateForCalc(item.unit_price);
+        var disc = parseNum(item.discount, 0);
         var discType = item.discount_type || 'fixed';
-        var taxRate = effectiveTaxRate(item.tax_rate, taxMode);
+        var taxRate = taxMode === 'none' ? 0 : Math.max(0, parseNum(item.tax_rate, 0));
+        if (qty <= 0 || rate <= 0) {
+            return {
+                line_subtotal: 0,
+                line_discount: 0,
+                line_taxable: 0,
+                tax_amount: 0,
+                line_total: 0,
+            };
+        }
         var lineSub = qty * rate;
         var lineDisc = discType === 'percent'
             ? Math.min(lineSub, lineSub * disc / 100)
@@ -401,18 +391,6 @@
         prepareRowsForCalc();
         setCalcStatus('Calculating…', '');
 
-        var items = gatherItems();
-        var invalidRow = items.findIndex(function (item) {
-            return !item.service_name || isRateInvalid(item.unit_price);
-        });
-        if (invalidRow >= 0) {
-            setCalcStatus('Select mentor and enter rate on each row.', 'danger');
-            itemsBody.querySelectorAll('.item-row').forEach(function (row, idx) {
-                row.querySelector('.item-line-total').textContent = money(0);
-            });
-            return;
-        }
-
         if (!cfg.calculateUrl) {
             recalcLocalFallback();
             return;
@@ -492,7 +470,7 @@
                 return;
             }
             if (input.classList.contains('item-qty')) {
-                input.value = '1';
+                input.value = '0';
                 return;
             }
             if (input.classList.contains('item-unit')) {
@@ -504,7 +482,11 @@
                 return;
             }
             if (input.classList.contains('item-tax')) {
-                input.value = String(cfg.defaultTaxRate || 18);
+                input.value = '0';
+                return;
+            }
+            if (input.classList.contains('item-rate')) {
+                input.value = '0';
                 return;
             }
             input.value = '';
@@ -592,8 +574,7 @@
     itemsBody.querySelectorAll('.item-row').forEach(function (row) {
         bindRowActions(row);
         syncMentorFromSku(row);
-        applyMentorSelection(row, true, shouldFillRate(row));
-        sanitizeRowNumbers(row);
+        applyMentorSelection(row, true, false);
     });
 
     ['additional_charges', 'amount_paid', 'tax_mode', 'billing_state', 'place_of_supply'].forEach(function (id) {
@@ -700,7 +681,6 @@
         if (data.tax_mode) {
             document.getElementById('tax_mode').value = data.tax_mode;
         }
-        syncTaxRatesForMode();
 
         var snapshot = data.mentor_snapshot || data.mentors || [];
         var snapshotEl = document.getElementById('mentor_snapshot');
@@ -725,76 +705,94 @@
     }
 
     function addRowFromData(item, idx) {
-        var row = document.createElement('tr');
-        row.className = 'item-row';
+        var row = document.createElement('div');
+        row.className = 'invoice-item-card item-row border rounded p-3 mb-3 bg-white';
+        row.setAttribute('data-index', String(idx));
 
         var mentorId = resolveMentorIdFromItem(item);
         var useCustom = !mentorId && item.service_name;
 
-        var mentorTd = document.createElement('td');
-        mentorTd.className = 'col-mentor';
-        var select = buildMentorSelect(useCustom ? 'custom' : mentorId);
-        mentorTd.appendChild(select);
-
-        var serviceInput = document.createElement('input');
-        serviceInput.type = 'hidden';
-        serviceInput.name = 'items[' + idx + '][service_name]';
-        serviceInput.className = 'item-service';
-        serviceInput.value = item.service_name || '';
-        mentorTd.appendChild(serviceInput);
-
-        var customInput = document.createElement('input');
-        customInput.type = 'text';
-        customInput.className = 'form-control form-control-sm item-service-custom mt-1' + (useCustom ? '' : ' d-none');
-        customInput.value = useCustom ? (item.service_name || '') : '';
-        customInput.placeholder = 'Custom item name';
-        customInput.autocomplete = 'off';
-        mentorTd.appendChild(customInput);
-
-        var skuInput = document.createElement('input');
-        skuInput.type = 'hidden';
-        skuInput.name = 'items[' + idx + '][sku]';
-        skuInput.className = 'item-sku';
-        skuInput.value = item.sku || mentorId || '';
-        mentorTd.appendChild(skuInput);
-        row.appendChild(mentorTd);
-
-        function cellInput(attrs, className, value, colClass) {
-            var td = document.createElement('td');
-            if (colClass) td.className = colClass;
+        function hiddenInput(name, className, value) {
             var input = document.createElement('input');
-            Object.keys(attrs).forEach(function (k) { input.setAttribute(k, attrs[k]); });
+            input.type = 'hidden';
+            input.name = name;
             input.className = className;
-            input.value = value != null && value !== '' ? value : '';
-            td.appendChild(input);
-            return td;
+            input.value = value != null ? value : '';
+            return input;
         }
 
-        row.appendChild(cellInput({
+        function labeledInput(label, input, colClass) {
+            var col = document.createElement('div');
+            col.className = colClass;
+            var lbl = document.createElement('label');
+            lbl.className = 'small text-muted mb-1 d-block';
+            lbl.textContent = label;
+            col.appendChild(lbl);
+            col.appendChild(input);
+            return col;
+        }
+
+        function mkInput(attrs, className, value) {
+            var input = document.createElement('input');
+            Object.keys(attrs).forEach(function (k) { input.setAttribute(k, attrs[k]); });
+            input.className = 'form-control ' + className;
+            input.value = value != null && value !== '' ? value : '';
+            return input;
+        }
+
+        row.appendChild(hiddenInput('items[' + idx + '][sort_order]', 'item-sort', idx));
+        row.appendChild(hiddenInput('items[' + idx + '][service_name]', 'item-service', item.service_name || ''));
+        row.appendChild(hiddenInput('items[' + idx + '][sku]', 'item-sku', item.sku || mentorId || ''));
+
+        var row1 = document.createElement('div');
+        row1.className = 'row g-2 mb-2';
+
+        var mentorCol = document.createElement('div');
+        mentorCol.className = 'col-md-6';
+        var mentorLbl = document.createElement('label');
+        mentorLbl.className = 'small text-muted mb-1 d-block';
+        mentorLbl.textContent = 'Mentor *';
+        mentorCol.appendChild(mentorLbl);
+        var select = buildMentorSelect(useCustom ? 'custom' : mentorId);
+        select.className = 'form-control item-mentor-select';
+        mentorCol.appendChild(select);
+        var customInput = document.createElement('input');
+        customInput.type = 'text';
+        customInput.className = 'form-control item-service-custom mt-1' + (useCustom ? '' : ' d-none');
+        customInput.value = useCustom ? (item.service_name || '') : '';
+        customInput.placeholder = 'Custom item name';
+        mentorCol.appendChild(customInput);
+        row1.appendChild(mentorCol);
+
+        row1.appendChild(labeledInput('Description', mkInput({
             type: 'text', name: 'items[' + idx + '][description]'
-        }, 'form-control form-control-sm item-description', item.description || '', 'col-desc'));
+        }, 'item-description', item.description || ''), 'col-md-6'));
+        row.appendChild(row1);
 
-        row.appendChild(cellInput({
-            type: 'number', step: '1', min: '1', max: '9999', name: 'items[' + idx + '][quantity]'
-        }, 'form-control form-control-sm item-qty item-sessions', parseQty(item.quantity), 'col-sessions'));
-
-        row.appendChild(cellInput({
+        var row2 = document.createElement('div');
+        row2.className = 'row g-2 mb-2';
+        row2.appendChild(labeledInput('Sessions', mkInput({
+            type: 'number', step: '1', min: '0', max: '9999', name: 'items[' + idx + '][quantity]'
+        }, 'item-qty item-sessions', item.quantity != null ? item.quantity : ''), 'col-6 col-md-2'));
+        row2.appendChild(labeledInput('Unit', mkInput({
             type: 'text', name: 'items[' + idx + '][unit]'
-        }, 'form-control form-control-sm item-unit', item.unit || 'Session', 'col-unit'));
-
-        row.appendChild(cellInput({
+        }, 'item-unit', item.unit || 'Session'), 'col-6 col-md-2'));
+        row2.appendChild(labeledInput('Rate (₹) *', mkInput({
             type: 'number', step: '0.01', min: '0', max: '100000', name: 'items[' + idx + '][unit_price]'
-        }, 'form-control form-control-sm item-rate', item.unit_price != null && !isRateInvalid(parseNum(item.unit_price, 0)) ? item.unit_price : '', 'col-rate'));
-
-        row.appendChild(cellInput({
+        }, 'item-rate', item.unit_price != null ? item.unit_price : ''), 'col-6 col-md-2'));
+        row2.appendChild(labeledInput('Discount', mkInput({
             type: 'number', step: '0.01', min: '0', name: 'items[' + idx + '][discount]'
-        }, 'form-control form-control-sm item-discount', item.discount || 0, 'col-disc'));
+        }, 'item-discount', item.discount || 0), 'col-6 col-md-2'));
 
-        var discTd = document.createElement('td');
-        discTd.className = 'col-disc-type';
+        var discCol = document.createElement('div');
+        discCol.className = 'col-6 col-md-2';
+        var discLbl = document.createElement('label');
+        discLbl.className = 'small text-muted mb-1 d-block';
+        discLbl.textContent = 'Disc type';
+        discCol.appendChild(discLbl);
         var discSelect = document.createElement('select');
         discSelect.name = 'items[' + idx + '][discount_type]';
-        discSelect.className = 'form-control form-control-sm item-discount-type';
+        discSelect.className = 'form-control item-discount-type';
         ['fixed', 'percent'].forEach(function (v) {
             var opt = document.createElement('option');
             opt.value = v;
@@ -802,47 +800,43 @@
             discSelect.appendChild(opt);
         });
         discSelect.value = item.discount_type || 'fixed';
-        discTd.appendChild(discSelect);
-        row.appendChild(discTd);
+        discCol.appendChild(discSelect);
+        row2.appendChild(discCol);
 
-        row.appendChild(cellInput({
+        row2.appendChild(labeledInput('GST %', mkInput({
             type: 'number', step: '0.01', min: '0', max: '100', name: 'items[' + idx + '][tax_rate]'
-        }, 'form-control form-control-sm item-tax', item.tax_rate != null && parseNum(item.tax_rate, 0) > 0 ? item.tax_rate : (cfg.defaultTaxRate || 18), 'col-tax'));
+        }, 'item-tax', item.tax_rate != null ? item.tax_rate : (cfg.defaultTaxRate || 18)), 'col-6 col-md-2'));
+        row.appendChild(row2);
 
-        var totalTd = document.createElement('td');
-        totalTd.className = 'item-line-total text-right align-middle col-total';
-        totalTd.textContent = money(0);
-        row.appendChild(totalTd);
-
-        var actionTd = document.createElement('td');
-        actionTd.className = 'text-nowrap col-actions';
-        var sortInput = document.createElement('input');
-        sortInput.type = 'hidden';
-        sortInput.name = 'items[' + idx + '][sort_order]';
-        sortInput.className = 'item-sort';
-        sortInput.value = idx;
-        actionTd.appendChild(sortInput);
-
+        var row3 = document.createElement('div');
+        row3.className = 'row g-2 align-items-center border-top pt-2 mt-1';
+        var totalCol = document.createElement('div');
+        totalCol.className = 'col';
+        totalCol.innerHTML = '<span class="text-muted small">Line total:</span> ';
+        var totalSpan = document.createElement('strong');
+        totalSpan.className = 'item-line-total fs-5 ms-1 text-primary';
+        totalSpan.textContent = money(0);
+        totalCol.appendChild(totalSpan);
+        row3.appendChild(totalCol);
+        var actCol = document.createElement('div');
+        actCol.className = 'col-auto d-flex gap-1';
         var dupBtn = document.createElement('button');
         dupBtn.type = 'button';
-        dupBtn.className = 'btn btn-xs btn--secondary btn-dup-item btn-row-action';
-        dupBtn.title = 'Duplicate row';
-        dupBtn.textContent = '+';
-        actionTd.appendChild(dupBtn);
-
+        dupBtn.className = 'btn btn-sm btn--secondary btn-dup-item';
+        dupBtn.textContent = '+ Copy';
         var rmBtn = document.createElement('button');
         rmBtn.type = 'button';
-        rmBtn.className = 'btn btn-xs btn--danger btn-remove-item btn-row-action';
-        rmBtn.title = 'Remove row';
-        rmBtn.textContent = '×';
-        actionTd.appendChild(rmBtn);
-        row.appendChild(actionTd);
+        rmBtn.className = 'btn btn-sm btn--danger btn-remove-item';
+        rmBtn.textContent = '× Remove';
+        actCol.appendChild(dupBtn);
+        actCol.appendChild(rmBtn);
+        row3.appendChild(actCol);
+        row.appendChild(row3);
 
         itemsBody.appendChild(row);
         bindRowActions(row);
         syncMentorFromSku(row);
-        applyMentorSelection(row, true, shouldFillRate(row));
-        sanitizeRowNumbers(row);
+        applyMentorSelection(row, true, false);
     }
 
     form.addEventListener('submit', function (e) {
@@ -851,12 +845,12 @@
         itemsBody.querySelectorAll('.item-row').forEach(function (row) {
             syncCustomServiceName(row);
             syncMentorFromSku(row);
-            applyMentorSelection(row, true, shouldFillRate(row));
-            sanitizeRowNumbers(row);
+            applyMentorSelection(row, true, false);
             var select = row.querySelector('.item-mentor-select');
             var serviceInput = row.querySelector('.item-service');
             var customInput = row.querySelector('.item-service-custom');
             var rateInput = row.querySelector('.item-rate');
+            var qtyInput = row.querySelector('.item-qty');
             if (select && select.value === '') {
                 invalid = true;
                 select.classList.add('is-invalid');
@@ -878,9 +872,16 @@
             if (rateInput && isRateInvalid(parseNum(rateInput.value, 0))) {
                 invalid = true;
                 rateInput.classList.add('is-invalid');
-                messages.push('Enter a valid rate (₹1–₹100,000) per session on each row.');
+                messages.push('Enter rate greater than ₹0 on each item before saving.');
             } else if (rateInput) {
                 rateInput.classList.remove('is-invalid');
+            }
+            if (qtyInput && parseQtyForCalc(qtyInput.value) <= 0) {
+                invalid = true;
+                qtyInput.classList.add('is-invalid');
+                messages.push('Enter at least 1 session before saving.');
+            } else if (qtyInput) {
+                qtyInput.classList.remove('is-invalid');
             }
         });
         if (invalid) {
@@ -920,7 +921,7 @@
         });
     }
 
-    recalcNow();
+    recalcLocal();
 
     if (cfg.autoDemoRef) {
         document.getElementById('btn-prefill-demo').click();

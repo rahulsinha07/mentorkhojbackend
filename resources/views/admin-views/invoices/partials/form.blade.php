@@ -13,7 +13,7 @@
     $defaultTaxRate = (float) ($settings->default_tax_rate ?? 18);
     if ($effectiveTaxMode !== 'none') {
         foreach ($items as $idx => $item) {
-            if ((float) ($item['tax_rate'] ?? 0) <= 0) {
+            if (!array_key_exists('tax_rate', $item) || $item['tax_rate'] === '' || $item['tax_rate'] === null) {
                 $items[$idx]['tax_rate'] = $defaultTaxRate;
             }
         }
@@ -37,17 +37,7 @@
         });
     $mentorSiteUrl = rtrim((string) config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
     foreach ($items as $idx => $item) {
-        $items[$idx]['quantity'] = max(1, min(9999, (int) ($item['quantity'] ?? 1)));
-        $rate = (float) ($item['unit_price'] ?? 0);
-        if ($rate <= 0 || $rate > 100000) {
-            $mentorId = $item['mentor_id'] ?? null;
-            if (!$mentorId && !empty($item['sku']) && ctype_digit((string) $item['sku'])) {
-                $mentorId = (int) $item['sku'];
-            }
-            $mentor = $mentorId ? $mentors->firstWhere('id', $mentorId) : null;
-            $fallback = $mentor && ($mentor->default_price ?? 0) > 0 ? (float) $mentor->default_price : null;
-            $items[$idx]['unit_price'] = $fallback ?? ($rate > 0 && $rate <= 100000 ? $rate : '');
-        }
+        $items[$idx]['quantity'] = max(0, min(9999, (int) ($item['quantity'] ?? 0)));
         if (empty($item['unit'])) {
             $items[$idx]['unit'] = 'Session';
         }
@@ -198,39 +188,13 @@
                         <button type="button" class="btn btn-sm btn--secondary" id="btn-calculate-items">{{ translate('Calculate Totals') }}</button>
                     </div>
                 </div>
-                <div class="card-body invoice-items-wrap p-0 p-md-3">
-                    <table class="table table-bordered invoice-items-table mb-0" id="items-table">
-                        <colgroup>
-                            <col class="col-mentor">
-                            <col class="col-desc">
-                            <col class="col-sessions">
-                            <col class="col-unit">
-                            <col class="col-rate">
-                            <col class="col-disc">
-                            <col class="col-disc-type">
-                            <col class="col-tax">
-                            <col class="col-total">
-                            <col class="col-actions">
-                        </colgroup>
-                        <thead><tr>
-                            <th class="col-mentor">{{ translate('Mentor') }}</th>
-                            <th class="col-desc">{{ translate('Description') }}</th>
-                            <th class="col-sessions">{{ translate('Sessions') }}</th>
-                            <th class="col-unit">{{ translate('Unit') }}</th>
-                            <th class="col-rate">{{ translate('Rate (₹)') }}</th>
-                            <th class="col-disc">{{ translate('Discount') }}</th>
-                            <th class="col-disc-type">{{ translate('Disc type') }}</th>
-                            <th class="col-tax">{{ translate('GST %') }}</th>
-                            <th class="col-total">{{ translate('Total') }}</th>
-                            <th class="col-actions"></th>
-                        </tr></thead>
-                        <tbody id="items-body">
+                <div class="card-body invoice-items-wrap p-3">
+                    <div id="items-body" class="invoice-items-list">
                         @foreach($items as $i => $item)
                             @include('admin-views.invoices.partials.item-row', ['index' => $i, 'item' => $item, 'mentors' => $mentors])
                         @endforeach
-                        </tbody>
-                    </table>
-                    <div class="px-3 pb-3 pt-2 d-flex flex-wrap gap-2 align-items-center border-top bg-light">
+                    </div>
+                    <div class="pt-2 d-flex flex-wrap gap-2 align-items-center border-top mt-2">
                         <button type="button" class="btn btn-sm btn--primary btn-add-item-row">{{ translate('Add Item') }}</button>
                         <button type="button" class="btn btn-sm btn--secondary btn-calculate-items">{{ translate('Calculate Totals') }}</button>
                         <span id="calc-status" class="small text-muted ms-1"></span>
@@ -308,56 +272,19 @@
 
 @push('css')
 <style>
-    .invoice-items-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .invoice-items-table {
-        min-width: 1280px;
-        width: max-content;
-        max-width: none;
-        table-layout: auto;
-    }
-    .invoice-items-table th,
-    .invoice-items-table td { vertical-align: middle; padding: 0.45rem; white-space: nowrap; }
-    .invoice-items-table .col-desc { white-space: normal; min-width: 140px; max-width: 220px; }
-    .invoice-items-table .col-mentor { min-width: 160px; }
-    .invoice-items-table .col-sessions { min-width: 88px; }
-    .invoice-items-table .col-unit { min-width: 96px; }
-    .invoice-items-table .col-rate { min-width: 132px; }
-    .invoice-items-table .col-disc { min-width: 84px; }
-    .invoice-items-table .col-disc-type { min-width: 92px; }
-    .invoice-items-table .col-tax { min-width: 84px; }
-    .invoice-items-table .col-total { min-width: 96px; text-align: right; }
-    .invoice-items-table .col-actions { min-width: 96px; text-align: center; }
-    .invoice-items-table input.form-control-sm,
-    .invoice-items-table select.form-control-sm {
-        width: 100%;
-        min-width: 72px;
-        min-height: 36px;
-        font-size: 0.9rem;
-        padding-left: 0.45rem;
-        padding-right: 0.45rem;
-    }
-    .invoice-items-table .item-rate,
-    .invoice-items-table .item-qty,
-    .invoice-items-table .item-tax,
-    .invoice-items-table .item-discount {
+    .invoice-items-list { display: flex; flex-direction: column; gap: 0; }
+    .invoice-item-card { box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .invoice-item-card .form-control { min-height: 38px; font-size: 0.95rem; }
+    .invoice-item-card .item-rate,
+    .invoice-item-card .item-qty,
+    .invoice-item-card .item-tax,
+    .invoice-item-card .item-discount {
         font-weight: 600;
         text-align: right;
         font-variant-numeric: tabular-nums;
-        min-width: 80px !important;
     }
-    .invoice-items-table .item-unit { min-width: 88px !important; }
-    .invoice-items-table .item-line-total {
-        font-weight: 700;
-        white-space: nowrap;
-        color: #1e3a5f;
-        font-variant-numeric: tabular-nums;
-    }
-    .invoice-items-table .col-actions .btn-row-action {
-        min-width: 32px;
-        padding: 4px 8px;
-        line-height: 1.2;
-    }
-    .invoice-items-table .is-invalid { border-color: #dc3545 !important; }
+    .invoice-item-card .item-line-total { font-variant-numeric: tabular-nums; }
+    .invoice-item-card .is-invalid { border-color: #dc3545 !important; }
     #calc-status.text-success { color: #008768 !important; }
     #calc-status.text-danger { color: #dc3545 !important; }
 </style>
@@ -378,5 +305,5 @@
         mentorkhojSiteUrl: @json($mentorSiteUrl),
     };
 </script>
-<script src="{{ asset('public/assets/admin/js/invoice-form.js') }}?v=11"></script>
+<script src="{{ asset('public/assets/admin/js/invoice-form.js') }}?v=12"></script>
 @endpush

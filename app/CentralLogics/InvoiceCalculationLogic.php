@@ -181,7 +181,7 @@ class InvoiceCalculationLogic
         $defaultRate = $defaultRate ?? (float) (InvoiceSetting::instance()->default_tax_rate ?? 18);
 
         foreach ($items as $index => $item) {
-            if ((float) ($item['tax_rate'] ?? 0) <= 0) {
+            if (!isset($item['tax_rate']) || $item['tax_rate'] === '' || $item['tax_rate'] === null) {
                 $items[$index]['tax_rate'] = $defaultRate;
             }
         }
