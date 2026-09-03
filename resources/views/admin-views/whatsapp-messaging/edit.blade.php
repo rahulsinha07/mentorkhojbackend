@@ -1,24 +1,103 @@
 @extends('layouts.admin.app')
 
-@section('title', 'WhatsApp Messaging (Demo)')
+@section('title', 'WhatsApp Messaging')
 
 @section('content')
     <div class="content container-fluid">
         <div class="page-header">
             <h1 class="page-header-title">
                 <span class="page-header-icon"><i class="tio-messages"></i></span>
-                <span>WhatsApp Messaging API</span>
+                <span>WhatsApp Messaging</span>
             </h1>
             <p class="text-muted mb-0">
-                Demo confirmation messages (NEET / JEE / Tech / AI). Separate from WhatsApp OTP login settings.
+                Mentorkhoj Cloud API inbox (+91 91026 95888). Incoming webhooks and outgoing Graph sends appear here.
             </p>
         </div>
 
         @if(session('success'))
             <div class="alert alert-success">{{ session('success') }}</div>
         @endif
+        @if(session('error'))
+            <div class="alert alert-danger">{{ session('error') }}</div>
+        @endif
+        @if(!$tableReady)
+            <div class="alert alert-warning">Message table is missing. Run <code>php artisan migrate</code>.</div>
+        @endif
+
+        <div class="row">
+            <div class="col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Conversations</h5>
+                    </div>
+                    <div class="card-body p-0" style="max-height: 520px; overflow: auto;">
+                        @forelse($threads as $thread)
+                            <a class="d-block px-3 py-2 border-bottom text-dark {{ $activeWaId === $thread->wa_id ? 'bg-light' : '' }}"
+                               href="{{ route('admin.whatsapp-messaging.edit', ['wa_id' => $thread->wa_id]) }}">
+                                <strong>{{ $thread->contact_name ?: $thread->wa_id }}</strong>
+                                <div class="small text-muted">{{ $thread->wa_id }}</div>
+                            </a>
+                        @empty
+                            <p class="text-muted p-3 mb-0">No messages yet. Send below or wait for a customer reply after the webhook is subscribed.</p>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-8 mb-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            @if($activeWaId)
+                                Thread {{ $activeWaId }}
+                            @else
+                                New message
+                            @endif
+                        </h5>
+                        <small class="text-muted">Webhook: <code>{{ $webhookUrl }}</code></small>
+                    </div>
+                    <div class="card-body">
+                        <div style="max-height: 360px; overflow: auto; background: #f8fafc; border-radius: 8px; padding: 12px;" id="wa-thread">
+                            @forelse($messages as $msg)
+                                <div class="mb-2 {{ $msg->direction === 'out' ? 'text-right' : '' }}">
+                                    <div class="d-inline-block px-3 py-2 rounded {{ $msg->direction === 'out' ? 'bg-primary text-white' : 'bg-white border' }}"
+                                         style="max-width: 85%; text-align: left;">
+                                        <div>{{ $msg->body }}</div>
+                                        <div class="small {{ $msg->direction === 'out' ? 'text-white-50' : 'text-muted' }} mt-1">
+                                            {{ $msg->direction === 'out' ? 'Sent' : 'Received' }}
+                                            · {{ $msg->type }}
+                                            @if($msg->status) · {{ $msg->status }} @endif
+                                            · {{ optional($msg->occurred_at)->format('d M H:i') }}
+                                        </div>
+                                    </div>
+                                </div>
+                            @empty
+                                <p class="text-muted mb-0">Select a conversation or send a new message.</p>
+                            @endforelse
+                        </div>
+
+                        <form class="mt-3" method="post" action="{{ route('admin.whatsapp-messaging.send') }}">
+                            @csrf
+                            <div class="form-row">
+                                <div class="col-md-4 form-group">
+                                    <label class="input-label">To (WhatsApp number)</label>
+                                    <input type="text" name="phone" class="form-control" required
+                                           value="{{ $activeWaId }}"
+                                           placeholder="91xxxxxxxxxx — not 9102695888">
+                                </div>
+                                <div class="col-md-8 form-group">
+                                    <label class="input-label">Message</label>
+                                    <textarea name="body" class="form-control" rows="2" required maxlength="4096" placeholder="Text within the 24-hour customer window"></textarea>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary" type="submit">Send WhatsApp</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <div class="card" style="max-width: 900px;">
+            <div class="card-header"><h5 class="card-title mb-0">API settings</h5></div>
             <div class="card-body">
                 <form method="post" action="{{ route('admin.whatsapp-messaging.update') }}">
                     @csrf
@@ -41,7 +120,7 @@
                         <div class="col-md-6 form-group">
                             <label class="input-label">Phone Number ID *</label>
                             <input type="text" name="phone_number_id" class="form-control"
-                                   value="{{ $settings['phone_number_id'] ?? '' }}" placeholder="1247043131821693">
+                                   value="{{ $settings['phone_number_id'] ?? '1247043131821693' }}" placeholder="1247043131821693">
                         </div>
                         <div class="col-md-6 form-group">
                             <label class="input-label">Access Token *</label>
@@ -59,7 +138,7 @@
                         <div class="col-md-6 form-group">
                             <label class="input-label">Display phone</label>
                             <input type="text" name="display_phone" class="form-control"
-                                   value="{{ $settings['display_phone'] ?? '' }}" placeholder="+91 …">
+                                   value="{{ $settings['display_phone'] ?? '+91 91026 95888' }}" placeholder="+91 91026 95888">
                         </div>
                         <div class="col-md-6 form-group">
                             <label class="input-label">API version</label>
@@ -113,3 +192,11 @@
         </div>
     </div>
 @endsection
+
+@if($activeWaId)
+    @push('script')
+        <script>
+            setTimeout(function () { window.location.reload(); }, 15000);
+        </script>
+    @endpush
+@endif

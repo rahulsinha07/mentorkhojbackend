@@ -2,8 +2,7 @@
 
 namespace App\CentralLogics;
 
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use App\CentralLogics\WhatsAppCloudApi;
 
 /**
  * Post demo-booking WhatsApp UTILITY templates.
@@ -173,11 +172,6 @@ class WhatsAppDemoBookingModule
             $to = '91' . $to;
         }
 
-        $version = $cfg['api_version'];
-        if ($version && !str_starts_with($version, 'v')) {
-            $version = 'v' . $version;
-        }
-
         $customerName = self::sanitize($name !== '' ? $name : 'there', 60);
         $program = self::sanitize(self::programLabel($vertical, $categoryLabel ?: $category), 60);
         $ref = self::sanitize($bookingRef, 40);
@@ -206,40 +200,17 @@ class WhatsAppDemoBookingModule
             ],
         ];
 
-        try {
-            $response = Http::withToken($cfg['access_token'])
-                ->timeout(20)
-                ->post("https://graph.facebook.com/{$version}/{$cfg['phone_number_id']}/messages", [
-                    'messaging_product' => 'whatsapp',
-                    'to' => $to,
-                    'type' => 'template',
-                    'template' => [
-                        'name' => $template,
-                        'language' => ['code' => $cfg['template_language']],
-                        'components' => $components,
-                    ],
-                ]);
+        $result = WhatsAppCloudApi::send($to, [
+            'type' => 'template',
+            'template' => [
+                'name' => $template,
+                'language' => ['code' => $cfg['template_language']],
+                'components' => $components,
+            ],
+        ], 'demo', 'Demo booked: ' . $template, 'template');
+        $result['template'] = $template;
 
-            if ($response->successful()) {
-                return ['status' => 'success', 'template' => $template];
-            }
-
-            Log::error('WhatsApp demo booking send failed', [
-                'template' => $template,
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-
-            return [
-                'status' => 'error',
-                'template' => $template,
-                'message' => mb_substr($response->body(), 0, 200),
-            ];
-        } catch (\Throwable $e) {
-            Log::error('WhatsApp demo booking exception', ['message' => $e->getMessage()]);
-
-            return ['status' => 'error', 'template' => $template, 'message' => $e->getMessage()];
-        }
+        return $result;
     }
 
     /**
@@ -272,11 +243,6 @@ class WhatsAppDemoBookingModule
             $to = '91' . $to;
         }
 
-        $version = $cfg['api_version'];
-        if ($version && !str_starts_with($version, 'v')) {
-            $version = 'v' . $version;
-        }
-
         $components = [
             [
                 'type' => 'body',
@@ -289,39 +255,16 @@ class WhatsAppDemoBookingModule
             ],
         ];
 
-        try {
-            $response = Http::withToken($cfg['access_token'])
-                ->timeout(20)
-                ->post("https://graph.facebook.com/{$version}/{$cfg['phone_number_id']}/messages", [
-                    'messaging_product' => 'whatsapp',
-                    'to' => $to,
-                    'type' => 'template',
-                    'template' => [
-                        'name' => $template,
-                        'language' => ['code' => $cfg['template_language']],
-                        'components' => $components,
-                    ],
-                ]);
+        $result = WhatsAppCloudApi::send($to, [
+            'type' => 'template',
+            'template' => [
+                'name' => $template,
+                'language' => ['code' => $cfg['template_language']],
+                'components' => $components,
+            ],
+        ], 'session', 'Session confirmed: ' . $template, 'template');
+        $result['template'] = $template;
 
-            if ($response->successful()) {
-                return ['status' => 'success', 'template' => $template];
-            }
-
-            Log::error('WhatsApp session confirmed send failed', [
-                'template' => $template,
-                'status' => $response->status(),
-                'body' => $response->body(),
-            ]);
-
-            return [
-                'status' => 'error',
-                'template' => $template,
-                'message' => mb_substr($response->body(), 0, 200),
-            ];
-        } catch (\Throwable $e) {
-            Log::error('WhatsApp session confirmed exception', ['message' => $e->getMessage()]);
-
-            return ['status' => 'error', 'template' => $template, 'message' => $e->getMessage()];
-        }
+        return $result;
     }
 }

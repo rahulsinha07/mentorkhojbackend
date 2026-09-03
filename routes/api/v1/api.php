@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\DeliveryManReviewController;
 use App\Http\Controllers\Api\V1\LoyaltyPointController;
 use App\Http\Controllers\Api\V1\MapApiController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\UserSessionNotificationController;
 use App\Http\Controllers\Api\V1\OfferController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\WishlistController;
@@ -64,7 +65,8 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
         ]);
     });
 
-    Route::match(['get', 'post'], 'whatsapp/webhook', [\App\Http\Controllers\Api\V1\WhatsAppWebhookController::class, 'handle']);
+    Route::match(['get', 'post'], 'whatsapp/webhook', [\App\Http\Controllers\Api\V1\WhatsAppWebhookController::class, 'handle'])
+        ->withoutMiddleware('throttle');
 
     Route::group(['prefix' => 'products'], function () {
         Route::get('all', [ProductController::class, 'getAllProducts']);
@@ -113,6 +115,13 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
         Route::put('update-profile', [CustomerController::class, 'updateProfile']);
         Route::put('cm-firebase-token', [CustomerController::class, 'updateFirebaseToken']);
         Route::delete('remove-account', [CustomerController::class, 'removeAccount']);
+
+        Route::group(['prefix' => 'user-notifications'], function () {
+            Route::get('/', [UserSessionNotificationController::class, 'index']);
+            Route::post('read-all', [UserSessionNotificationController::class, 'markAllRead']);
+            Route::post('{id}/read', [UserSessionNotificationController::class, 'markRead']);
+        });
+
 
         Route::group(['prefix' => 'address', 'middleware' => 'guest_user'], function () {
             Route::get('list', [CustomerController::class, 'addressList'])->withoutMiddleware(['auth:api', 'customer_is_block']);

@@ -2,7 +2,7 @@
 
 namespace App\CentralLogics;
 
-use Illuminate\Support\Facades\Http;
+use App\CentralLogics\WhatsAppCloudApi;
 use Illuminate\Support\Facades\Log;
 
 class WhatsAppOtpModule
@@ -81,25 +81,21 @@ class WhatsAppOtpModule
         }
 
         try {
-            $response = Http::withToken($accessToken)
-                ->post("https://graph.facebook.com/v21.0/{$phoneNumberId}/messages", [
-                    'messaging_product' => 'whatsapp',
-                    'to' => $to,
-                    'type' => 'template',
-                    'template' => [
-                        'name' => $templateName,
-                        'language' => ['code' => $templateLanguage],
-                        'components' => $components,
-                    ],
-                ]);
+            $result = WhatsAppCloudApi::send($to, [
+                'type' => 'template',
+                'template' => [
+                    'name' => $templateName,
+                    'language' => ['code' => $templateLanguage],
+                    'components' => $components,
+                ],
+            ], 'otp', 'OTP template sent', 'template');
 
-            if ($response->successful()) {
+            if (($result['status'] ?? '') === 'success') {
                 return 'success';
             }
 
             Log::error('WhatsApp OTP send failed', [
-                'status' => $response->status(),
-                'body' => $response->body(),
+                'message' => $result['message'] ?? 'unknown',
             ]);
         } catch (\Exception $exception) {
             Log::error('WhatsApp OTP exception', ['message' => $exception->getMessage()]);

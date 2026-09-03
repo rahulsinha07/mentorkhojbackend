@@ -203,11 +203,14 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
         Route::group(['prefix' => 'mentor', 'as' => 'mentor.','middleware'=>['module:product_management']], function () {
             Route::get('list', [MentorController::class, 'list'])->name('list');
             Route::get('session-messages', [SessionChatAdminController::class, 'index'])->name('session-messages');
+            Route::get('bookings/analytics', [MentorBookingController::class, 'analytics'])->name('bookings.analytics');
+            Route::post('bookings/reminder-1h-toggle', [MentorBookingController::class, 'toggleReminder1h'])->name('bookings.reminder-1h-toggle');
             Route::get('bookings', [MentorBookingController::class, 'list'])->name('bookings.list');
             Route::get('bookings/{id}', [MentorBookingController::class, 'show'])->name('bookings.show');
             Route::post('bookings/{id}/send-payment-email', [MentorBookingController::class, 'sendPaymentReminder'])->name('bookings.send-payment-email');
             Route::post('bookings/{id}/complete', [MentorBookingController::class, 'complete'])->name('bookings.complete');
             Route::post('bookings/{id}/reschedule', [MentorBookingController::class, 'reschedule'])->name('bookings.reschedule');
+            Route::post('bookings/{id}/no-show', [MentorBookingController::class, 'markNoShowAdmin'])->name('bookings.no-show');
             Route::get('edit/{id}', [MentorController::class, 'edit'])->name('edit');
             Route::post('update/{id}', [MentorController::class, 'update'])->name('update');
             Route::get('status/{id}/{status}', [MentorController::class, 'status'])->name('status');
@@ -241,6 +244,7 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
         Route::group(['prefix' => 'whatsapp-messaging', 'as' => 'whatsapp-messaging.', 'middleware' => ['module:promotion_management']], function () {
             Route::get('/', [WhatsAppMessagingAdminController::class, 'edit'])->name('edit');
             Route::put('/', [WhatsAppMessagingAdminController::class, 'update'])->name('update');
+            Route::post('send', [WhatsAppMessagingAdminController::class, 'send'])->name('send');
         });
 
         Route::group(['prefix' => 'internship', 'as' => 'internship.', 'middleware' => ['module:promotion_management']], function () {
@@ -561,7 +565,13 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::delete('{id}', [InvoiceAdminController::class, 'destroy'])->name('destroy');
             Route::get('{id}/pdf', [InvoiceAdminController::class, 'pdf'])->name('pdf');
             Route::get('{id}/print', [InvoiceAdminController::class, 'print'])->name('print');
+            Route::get('{id}/mentor-agreement/{mentorId}/pdf', [InvoiceAdminController::class, 'mentorAgreementPdf'])->name('mentor-agreement.pdf');
+            Route::get('{id}/mentor-agreement/{mentorId}/print', [InvoiceAdminController::class, 'mentorAgreementPrint'])->name('mentor-agreement.print');
+            Route::get('{id}/mentor-agreement/{mentorId}/whatsapp', [InvoiceAdminController::class, 'mentorAgreementWhatsappRedirect'])->name('mentor-agreement.whatsapp');
+            Route::post('{id}/mentor-agreement/{mentorId}/send-whatsapp', [InvoiceAdminController::class, 'sendMentorAgreementWhatsApp'])->name('mentor-agreement.send-whatsapp');
             Route::post('{id}/send', [InvoiceAdminController::class, 'send'])->name('send');
+            Route::get('{id}/whatsapp', [InvoiceAdminController::class, 'whatsappRedirect'])->name('whatsapp');
+            Route::post('{id}/send-whatsapp', [InvoiceAdminController::class, 'sendWhatsApp'])->name('send-whatsapp');
         });
 
         Route::group(['prefix' => 'invoice-settings', 'as' => 'invoice-settings.', 'middleware' => ['module:invoice_management']], function () {
