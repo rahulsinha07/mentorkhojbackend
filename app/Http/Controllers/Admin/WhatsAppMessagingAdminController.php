@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\CentralLogics\WhatsAppCloudApi;
+use App\CentralLogics\WhatsAppDemoBookingModule;
 use App\Model\WhatsApp\WhatsAppMessage;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -30,6 +31,7 @@ class WhatsAppMessagingAdminController extends Controller
         $messages = collect();
         $activeWaId = WhatsAppCloudApi::normalizeWaId((string) $request->query('wa_id', ''));
         $tableReady = Schema::hasTable('whatsapp_messages');
+        $windowOpen = false;
 
         if ($tableReady) {
             $threads = WhatsAppMessage::query()
@@ -47,8 +49,19 @@ class WhatsAppMessagingAdminController extends Controller
                     ->orderBy('id')
                     ->limit(400)
                     ->get();
+                $windowOpen = WhatsAppCloudApi::isCustomerWindowOpen($activeWaId);
             }
         }
+
+        $cfg = WhatsAppDemoBookingModule::messagingConfig();
+        $templateOptions = [
+            'followup' => (string) ($settings['templates']['followup'] ?? 'mentorkhoj_util_followup'),
+            'neet' => (string) ($cfg['templates']['neet'] ?? 'mentorkhoj_util_demo_neet'),
+            'jee' => (string) ($cfg['templates']['jee'] ?? 'mentorkhoj_util_demo_jee'),
+            'tech' => (string) ($cfg['templates']['tech'] ?? 'mentorkhoj_util_demo_tech'),
+            'ai' => (string) ($cfg['templates']['ai'] ?? 'mentorkhoj_util_demo_ai'),
+            'session_confirmed' => (string) ($cfg['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed'),
+        ];
 
         return view('admin-views.whatsapp-messaging.edit', [
             'settings' => $settings,
@@ -57,6 +70,9 @@ class WhatsAppMessagingAdminController extends Controller
             'activeWaId' => $activeWaId,
             'webhookUrl' => url('/api/v1/whatsapp/webhook'),
             'tableReady' => $tableReady,
+            'windowOpen' => $windowOpen,
+            'templateOptions' => $templateOptions,
+            'defaultSendMode' => $windowOpen ? 'text' : 'template',
         ]);
     }
 
@@ -64,26 +80,126 @@ class WhatsAppMessagingAdminController extends Controller
     {
         $data = $request->validate([
             'phone' => 'required|string|max:32',
-            'body' => 'required|string|max:4096',
+            'send_mode' => 'required|in:text,template',
+            'body' => 'nullable|string|max:4096',
+            'template_key' => 'nullable|string|max:64',
+            'template_name' => 'nullable|string|max:120',
+            'param1' => 'nullable|string|max:500',
+            'param2' => 'nullable|string|max:500',
+            'param3' => 'nullable|string|max:500',
+            'param4' => 'nullable|string|max:500',
+            'param5' => 'nullable|string|max:500',
         ]);
 
-        $result = WhatsAppCloudApi::sendText($data['phone'], $data['body'], 'admin');
-        $waId = $result['wa_id'] ?? WhatsAppCloudApi::normalizeWaId($data['phone']);
+        $waId = WhatsAppCloudApi::normalizeWaId($data['phone']);
+        $mode = $data['send_mode'];
 
+        if ($mode === 'text') {
+            $body = trim((string) ($data['body'] ?? ''));
+            if ($body === '') {
+                return redirect()
+                    ->route('admin.whatsapp-messaging.edit', ['wa_id' => $waId])
+                    ->with('error', 'Enter a text message, or switch to Template to message anytime.');
+            }
+
+            $result = WhatsAppCloudApi::sendText($data['phone'], $body, 'admin');
+            $waId = $result['wa_id'] ?? $waId;
+
+            if (($result['status'] ?? '') === 'success') {
+                return redirect()
+                    ->route('admin.whatsapp-messaging.edit', ['wa_id' => $waId])
+                    ->with('success', 'Text message sent.');
+            }
+
+            $message = $result['message'] ?? 'Send failed';
+            if (stripos($message, '24') !== false || stripos($message, 're-engage') !== false || stripos($message, 'outside') !== false) {
+                $message = 'Free-form text is only allowed within 24 hours of the customer messaging you. Switch Send mode to Template to message anytime.';
+            }
+
+            return redirect()
+                ->route('admin.whatsapp-messaging.edit', ['wa_id' => $waId])
+                ->with('error', $message);
+        }
+
+        $settings = $this->loadSettings();
+        $cfg = WhatsAppDemoBookingModule::messagingConfig();
+        $key = (string) ($data['template_key'] ?? 'followup');
+        $customName = trim((string) ($data['template_name'] ?? ''));
+
+        $map = [
+            'followup' => (string) ($settings['templates']['followup'] ?? 'mentorkhoj_util_followup'),
+            'neet' => (string) ($cfg['templates']['neet'] ?? 'mentorkhoj_util_demo_neet'),
+            'jee' => (string) ($cfg['templates']['jee'] ?? 'mentorkhoj_util_demo_jee'),
+            'tech' => (string) ($cfg['templates']['tech'] ?? 'mentorkhoj_util_demo_tech'),
+            'ai' => (string) ($cfg['templates']['ai'] ?? 'mentorkhoj_util_demo_ai'),
+            'session_confirmed' => (string) ($cfg['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed'),
+            'custom' => $customName,
+        ];
+
+        $templateName = $map[$key] ?? $customName;
+        if ($templateName === '') {
+            return redirect()
+                ->route('admin.whatsapp-messaging.edit', ['wa_id' => $waId])
+                ->with('error', 'Choose a template or enter a custom template name.');
+        }
+
+        $params = array_values(array_filter([
+            trim((string) ($data['param1'] ?? '')),
+            trim((string) ($data['param2'] ?? '')),
+            trim((string) ($data['param3'] ?? '')),
+            trim((string) ($data['param4'] ?? '')),
+            trim((string) ($data['param5'] ?? '')),
+        ], static fn ($v) => $v !== ''));
+
+        // Follow-up / free-text style: one body variable = message box
+        if ($key === 'followup' || $key === 'custom') {
+            $freeText = trim((string) ($data['body'] ?? ''));
+            if ($params === [] && $freeText !== '') {
+                $params = [$freeText];
+            }
+            if ($params === []) {
+                return redirect()
+                    ->route('admin.whatsapp-messaging.edit', ['wa_id' => $waId])
+                    ->with('error', 'Enter the message text (maps to template body {{1}}).');
+            }
+            $result = WhatsAppCloudApi::sendTemplate($data['phone'], $templateName, $params, 'admin');
+        } elseif (in_array($key, ['neet', 'jee', 'tech', 'ai'], true)) {
+            $name = $params[0] ?? 'there';
+            $result = WhatsAppDemoBookingModule::sendDemoBooked(
+                $data['phone'],
+                $name,
+                'ADMIN-' . strtoupper(substr(uniqid(), -6)),
+                $key,
+                $key,
+                $params[1] ?? null,
+                strtoupper($key)
+            );
+        } elseif ($key === 'session_confirmed') {
+            $result = WhatsAppCloudApi::sendTemplate(
+                $data['phone'],
+                $templateName,
+                [
+                    $params[0] ?? 'there',
+                    $params[1] ?? now()->format('d M Y'),
+                    $params[2] ?? now()->format('h:i A'),
+                    $params[3] ?? '+91 7366939888 / +91 9102695888',
+                ],
+                'admin'
+            );
+        } else {
+            $result = WhatsAppCloudApi::sendTemplate($data['phone'], $templateName, $params, 'admin');
+        }
+
+        $waId = $result['wa_id'] ?? $waId;
         if (($result['status'] ?? '') === 'success') {
             return redirect()
                 ->route('admin.whatsapp-messaging.edit', ['wa_id' => $waId])
-                ->with('success', 'Message sent.');
-        }
-
-        $message = $result['message'] ?? 'Send failed';
-        if (stripos($message, '24') !== false || stripos($message, 're-engage') !== false) {
-            $message .= ' Free-form text only works within 24 hours of the customer messaging Mentorkhoj.';
+                ->with('success', 'Template sent (works anytime, not limited to 24 hours).');
         }
 
         return redirect()
             ->route('admin.whatsapp-messaging.edit', ['wa_id' => $waId])
-            ->with('error', $message);
+            ->with('error', $result['message'] ?? 'Template send failed. Confirm the template is APPROVED in Meta.');
     }
 
     public function update(Request $request)
@@ -102,13 +218,10 @@ class WhatsAppMessagingAdminController extends Controller
             'template_jee' => 'nullable|string|max:120',
             'template_tech' => 'nullable|string|max:120',
             'template_ai' => 'nullable|string|max:120',
+            'template_followup' => 'nullable|string|max:120',
         ]);
 
-        $existing = DB::table('business_settings')->where('key', self::SETTINGS_KEY)->first();
-        $prev = $existing && $existing->value ? json_decode($existing->value, true) : [];
-        if (!is_array($prev)) {
-            $prev = [];
-        }
+        $prev = $this->loadSettings();
 
         $token = trim((string) ($data['access_token'] ?? ''));
         if ($token === '') {
@@ -132,8 +245,10 @@ class WhatsAppMessagingAdminController extends Controller
                 'jee' => trim((string) ($data['template_jee'] ?? 'mentorkhoj_util_demo_jee')) ?: 'mentorkhoj_util_demo_jee',
                 'tech' => trim((string) ($data['template_tech'] ?? 'mentorkhoj_util_demo_tech')) ?: 'mentorkhoj_util_demo_tech',
                 'ai' => trim((string) ($data['template_ai'] ?? 'mentorkhoj_util_demo_ai')) ?: 'mentorkhoj_util_demo_ai',
-                'session_confirmed' => trim((string) ($data['template_session_confirmed'] ?? ($prev['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed')))
+                'session_confirmed' => trim((string) ($prev['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed'))
                     ?: 'mentorkhoj_util_session_confirmed',
+                'followup' => trim((string) ($data['template_followup'] ?? ($prev['templates']['followup'] ?? 'mentorkhoj_util_followup')))
+                    ?: 'mentorkhoj_util_followup',
             ],
         ];
 
@@ -147,5 +262,14 @@ class WhatsAppMessagingAdminController extends Controller
         );
 
         return back()->with('success', 'WhatsApp messaging settings saved. Demo sends will use these values.');
+    }
+
+    /** @return array<string, mixed> */
+    private function loadSettings(): array
+    {
+        $row = DB::table('business_settings')->where('key', self::SETTINGS_KEY)->first();
+        $settings = $row && $row->value ? json_decode($row->value, true) : [];
+
+        return is_array($settings) ? $settings : [];
     }
 }

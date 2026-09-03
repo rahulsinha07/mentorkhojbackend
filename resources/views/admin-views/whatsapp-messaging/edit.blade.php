@@ -75,7 +75,23 @@
                             @endforelse
                         </div>
 
-                        <form class="mt-3" method="post" action="{{ route('admin.whatsapp-messaging.send') }}">
+                        @if($activeWaId)
+                            @if($windowOpen)
+                                <div class="alert alert-success py-2 mt-3 mb-2">
+                                    Customer window <strong>open</strong> — free-form text works. Templates work anytime.
+                                </div>
+                            @else
+                                <div class="alert alert-warning py-2 mt-3 mb-2">
+                                    Customer window <strong>closed</strong> (no inbound in last 24h). Use <strong>Template</strong> to message anytime. All received messages still show here forever.
+                                </div>
+                            @endif
+                        @else
+                            <div class="alert alert-info py-2 mt-3 mb-2">
+                                Received messages always appear (no time limit). Free-form text only within 24h of a customer reply; use Template to start or continue anytime.
+                            </div>
+                        @endif
+
+                        <form class="mt-2" method="post" action="{{ route('admin.whatsapp-messaging.send') }}" id="wa-send-form">
                             @csrf
                             <div class="form-row">
                                 <div class="col-md-4 form-group">
@@ -84,9 +100,58 @@
                                            value="{{ $activeWaId }}"
                                            placeholder="91xxxxxxxxxx — not 9102695888">
                                 </div>
-                                <div class="col-md-8 form-group">
-                                    <label class="input-label">Message</label>
-                                    <textarea name="body" class="form-control" rows="2" required maxlength="4096" placeholder="Text within the 24-hour customer window"></textarea>
+                                <div class="col-md-4 form-group">
+                                    <label class="input-label">Send mode</label>
+                                    <select name="send_mode" id="wa-send-mode" class="form-control" required>
+                                        <option value="text" {{ ($defaultSendMode ?? 'text') === 'text' ? 'selected' : '' }}>Text (within 24h window)</option>
+                                        <option value="template" {{ ($defaultSendMode ?? 'text') === 'template' ? 'selected' : '' }}>Template (anytime)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 form-group" id="wa-template-wrap">
+                                    <label class="input-label">Template</label>
+                                    <select name="template_key" id="wa-template-key" class="form-control">
+                                        <option value="followup">Follow-up (free text → body variable)</option>
+                                        <option value="neet">Demo NEET</option>
+                                        <option value="jee">Demo JEE</option>
+                                        <option value="tech">Demo Tech</option>
+                                        <option value="ai">Demo AI/ML</option>
+                                        <option value="session_confirmed">Session confirmed</option>
+                                        <option value="custom">Custom template name</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group d-none" id="wa-custom-template-wrap">
+                                <label class="input-label">Custom Meta template name</label>
+                                <input type="text" name="template_name" class="form-control" placeholder="approved_template_name">
+                            </div>
+                            <div class="form-group">
+                                <label class="input-label" id="wa-body-label">Message</label>
+                                <textarea name="body" id="wa-body" class="form-control" rows="2" maxlength="4096"
+                                          placeholder="Your message"></textarea>
+                                <small class="text-muted" id="wa-body-hint">
+                                    Text mode: free reply inside 24h. Template follow-up: body becomes the template’s first variable.
+                                </small>
+                            </div>
+                            <div class="form-row d-none" id="wa-params-wrap">
+                                <div class="col-md form-group">
+                                    <label class="input-label">Param 1 (name)</label>
+                                    <input type="text" name="param1" class="form-control" placeholder="Optional">
+                                </div>
+                                <div class="col-md form-group">
+                                    <label class="input-label">Param 2</label>
+                                    <input type="text" name="param2" class="form-control" placeholder="Optional">
+                                </div>
+                                <div class="col-md form-group">
+                                    <label class="input-label">Param 3</label>
+                                    <input type="text" name="param3" class="form-control" placeholder="Optional">
+                                </div>
+                                <div class="col-md form-group">
+                                    <label class="input-label">Param 4</label>
+                                    <input type="text" name="param4" class="form-control" placeholder="Optional">
+                                </div>
+                                <div class="col-md form-group">
+                                    <label class="input-label">Param 5</label>
+                                    <input type="text" name="param5" class="form-control" placeholder="Optional">
                                 </div>
                             </div>
                             <button class="btn btn-primary" type="submit">Send WhatsApp</button>
@@ -184,6 +249,13 @@
                             <input type="text" name="template_ai" class="form-control"
                                    value="{{ $settings['templates']['ai'] ?? 'mentorkhoj_util_demo_ai' }}">
                         </div>
+                        <div class="col-md-6 form-group">
+                            <label class="input-label">Follow-up (anytime free text)</label>
+                            <input type="text" name="template_followup" class="form-control"
+                                   value="{{ $settings['templates']['followup'] ?? 'mentorkhoj_util_followup' }}"
+                                   placeholder="mentorkhoj_util_followup">
+                            <small class="text-muted">Approved Meta template with one body variable for your message. Required to send free text outside 24h.</small>
+                        </div>
                     </div>
 
                     <button class="btn btn-primary" type="submit">Save WhatsApp settings</button>
@@ -193,10 +265,53 @@
     </div>
 @endsection
 
-@if($activeWaId)
-    @push('script')
-        <script>
-            setTimeout(function () { window.location.reload(); }, 15000);
-        </script>
-    @endpush
-@endif
+@push('script')
+    <script>
+        (function () {
+            var modeEl = document.getElementById('wa-send-mode');
+            var keyEl = document.getElementById('wa-template-key');
+            var templateWrap = document.getElementById('wa-template-wrap');
+            var customWrap = document.getElementById('wa-custom-template-wrap');
+            var paramsWrap = document.getElementById('wa-params-wrap');
+            var bodyEl = document.getElementById('wa-body');
+            var hintEl = document.getElementById('wa-body-hint');
+
+            function sync() {
+                if (!modeEl) return;
+                var isTemplate = modeEl.value === 'template';
+                if (templateWrap) templateWrap.style.display = isTemplate ? '' : 'none';
+                var key = keyEl ? keyEl.value : 'followup';
+                if (customWrap) customWrap.classList.toggle('d-none', !(isTemplate && key === 'custom'));
+                if (paramsWrap) {
+                    var showParams = isTemplate && ['neet', 'jee', 'tech', 'ai', 'session_confirmed', 'custom'].indexOf(key) !== -1;
+                    paramsWrap.classList.toggle('d-none', !showParams);
+                }
+                if (bodyEl) {
+                    if (!isTemplate) {
+                        bodyEl.placeholder = 'Free-form text (only within 24h of customer reply)';
+                        bodyEl.required = true;
+                    } else if (key === 'followup' || key === 'custom') {
+                        bodyEl.placeholder = 'Message text for template body variable';
+                        bodyEl.required = true;
+                    } else {
+                        bodyEl.placeholder = 'Optional note (demo templates use Param 1 as name)';
+                        bodyEl.required = false;
+                    }
+                }
+                if (hintEl) {
+                    hintEl.textContent = isTemplate
+                        ? 'Templates can be sent anytime. Follow-up needs an APPROVED Meta template with a body variable.'
+                        : 'Received messages always show. Free-form send only works inside the 24-hour customer window.';
+                }
+            }
+
+            if (modeEl) modeEl.addEventListener('change', sync);
+            if (keyEl) keyEl.addEventListener('change', sync);
+            sync();
+
+            @if($activeWaId)
+            setTimeout(function () { window.location.reload(); }, 20000);
+            @endif
+        })();
+    </script>
+@endpush

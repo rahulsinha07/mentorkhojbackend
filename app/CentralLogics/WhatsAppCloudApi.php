@@ -20,6 +20,30 @@ class WhatsAppCloudApi
     }
 
     /**
+     * Customer service window: free-form text is allowed for 24h after last inbound.
+     */
+    public static function isCustomerWindowOpen(string $waId): bool
+    {
+        $waId = self::normalizeWaId($waId);
+        if ($waId === '') {
+            return false;
+        }
+
+        $lastIn = WhatsAppMessage::query()
+            ->where('wa_id', $waId)
+            ->where('direction', 'in')
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('id')
+            ->value('occurred_at');
+
+        if (!$lastIn) {
+            return false;
+        }
+
+        return $lastIn->gte(now()->subHours(24));
+    }
+
+    /**
      * @return array{status:string,wamid?:string,message?:string,wa_id?:string}
      */
     public static function sendText(string $phone, string $body, string $source = 'admin'): array
@@ -36,6 +60,72 @@ class WhatsAppCloudApi
                 'body' => mb_substr($body, 0, 4096),
             ],
         ], $source, $body, 'text');
+    }
+
+    /**
+     * Approved template — works anytime (not limited to the 24h window).
+     *
+     * @param list<string> $bodyParams
+     * @return array{status:string,wamid?:string,message?:string,wa_id?:string,template?:string}
+     */
+    public static function sendTemplate(
+        string $phone,
+        string $templateName,
+        array $bodyParams = [],
+        string $source = 'admin',
+        ?string $language = null,
+        ?string $headerImageUrl = null
+    ): array {
+        $cfg = WhatsAppDemoBookingModule::messagingConfig();
+        $templateName = trim($templateName);
+        if ($templateName === '') {
+            return ['status' => 'error', 'message' => 'Template name is required'];
+        }
+
+        $language = $language ?: ($cfg['template_language'] ?? 'en');
+        $components = [];
+
+        if ($headerImageUrl) {
+            $components[] = [
+                'type' => 'header',
+                'parameters' => [
+                    [
+                        'type' => 'image',
+                        'image' => ['link' => $headerImageUrl],
+                    ],
+                ],
+            ];
+        }
+
+        if ($bodyParams !== []) {
+            $components[] = [
+                'type' => 'body',
+                'parameters' => array_map(static function ($text) {
+                    return ['type' => 'text', 'text' => mb_substr(trim((string) $text), 0, 1024) ?: '-'];
+                }, array_values($bodyParams)),
+            ];
+        }
+
+        $payload = [
+            'type' => 'template',
+            'template' => [
+                'name' => $templateName,
+                'language' => ['code' => $language],
+            ],
+        ];
+        if ($components !== []) {
+            $payload['template']['components'] = $components;
+        }
+
+        $preview = 'Template: ' . $templateName;
+        if ($bodyParams !== []) {
+            $preview .= ' — ' . mb_substr(implode(' | ', $bodyParams), 0, 200);
+        }
+
+        $result = self::send($phone, $payload, $source, $preview, 'template');
+        $result['template'] = $templateName;
+
+        return $result;
     }
 
     /**
@@ -139,10 +229,57 @@ class WhatsAppCloudApi
                 foreach (($value['messages'] ?? []) as $message) {
                     self::storeInbound($message, $nameByWa);
                 }
+                foreach (($value['message_echoes'] ?? []) as $echo) {
+                    self::storeEcho($echo);
+                }
+                foreach (($value['smb_message_echoes'] ?? []) as $echo) {
+                    self::storeEcho($echo);
+                }
                 foreach (($value['statuses'] ?? []) as $status) {
                     self::applyStatus($status);
                 }
             }
+        }
+    }
+
+    /**
+     * Messages sent from WhatsApp Business app / coex — store as outbound.
+     *
+     * @param array<string, mixed> $echo
+     */
+    private static function storeEcho(array $echo): void
+    {
+        $wamid = (string) ($echo['id'] ?? '');
+        $to = self::normalizeWaId((string) ($echo['to'] ?? ($echo['recipient_id'] ?? '')));
+        if ($to === '') {
+            return;
+        }
+
+        $type = (string) ($echo['type'] ?? 'unknown');
+        $body = self::extractInboundBody($echo, $type);
+        $ts = isset($echo['timestamp']) ? (int) $echo['timestamp'] : time();
+
+        $attrs = [
+            'wa_id' => $to,
+            'contact_name' => null,
+            'direction' => 'out',
+            'type' => $type,
+            'body' => $body,
+            'status' => 'sent',
+            'source' => 'echo',
+            'payload' => $echo,
+            'occurred_at' => now()->setTimestamp($ts),
+        ];
+
+        try {
+            if ($wamid !== '') {
+                WhatsAppMessage::query()->updateOrCreate(['wamid' => $wamid], $attrs);
+
+                return;
+            }
+            WhatsAppMessage::query()->create($attrs + ['wamid' => null]);
+        } catch (\Throwable $e) {
+            Log::warning('WhatsApp echo store failed', ['message' => $e->getMessage()]);
         }
     }
 
