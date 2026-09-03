@@ -110,12 +110,12 @@
                                 <div class="col-md-4 form-group" id="wa-template-wrap">
                                     <label class="input-label">Template</label>
                                     <select name="template_key" id="wa-template-key" class="form-control">
-                                        <option value="followup">Follow-up (free text → body variable)</option>
-                                        <option value="neet">Demo NEET</option>
-                                        <option value="jee">Demo JEE</option>
-                                        <option value="tech">Demo Tech</option>
-                                        <option value="ai">Demo AI/ML</option>
-                                        <option value="session_confirmed">Session confirmed</option>
+                                        <option value="neet" {{ ($defaultTemplateKey ?? 'neet') === 'neet' ? 'selected' : '' }}>Demo NEET (approved — anytime)</option>
+                                        <option value="jee" {{ ($defaultTemplateKey ?? '') === 'jee' ? 'selected' : '' }}>Demo JEE (approved — anytime)</option>
+                                        <option value="tech" {{ ($defaultTemplateKey ?? '') === 'tech' ? 'selected' : '' }}>Demo Tech (approved — anytime)</option>
+                                        <option value="ai" {{ ($defaultTemplateKey ?? '') === 'ai' ? 'selected' : '' }}>Demo AI/ML (approved — anytime)</option>
+                                        <option value="session_confirmed" {{ ($defaultTemplateKey ?? '') === 'session_confirmed' ? 'selected' : '' }}>Session confirmed</option>
+                                        <option value="followup" {{ ($defaultTemplateKey ?? '') === 'followup' ? 'selected' : '' }}>Follow-up free text (needs Meta approval)</option>
                                         <option value="custom">Custom template name</option>
                                     </select>
                                 </div>

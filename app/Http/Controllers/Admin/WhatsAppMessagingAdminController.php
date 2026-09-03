@@ -73,6 +73,7 @@ class WhatsAppMessagingAdminController extends Controller
             'windowOpen' => $windowOpen,
             'templateOptions' => $templateOptions,
             'defaultSendMode' => $windowOpen ? 'text' : 'template',
+            'defaultTemplateKey' => $windowOpen ? 'followup' : 'neet',
         ]);
     }
 
