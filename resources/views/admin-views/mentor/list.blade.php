@@ -40,6 +40,7 @@
                             <tr>
                                 <th>{{ translate('#') }}</th>
                                 <th>{{ translate('mentor_name') }}</th>
+                                <th>{{ translate('phone') }}</th>
                                 <th>{{ translate('headline') }}</th>
                                 <th class="text-center">{{ translate('services') }}</th>
                                 <th class="text-center">{{ translate('bookings') }}</th>
@@ -63,6 +64,18 @@
                                                 <small class="d-block text-muted">{{ '@' . $mentor->username }}</small>
                                             </h6>
                                         </div>
+                                    </td>
+                                    <td>
+                                        @php($phone = trim((string) ($mentor->user?->phone ?? '')))
+                                        @if($phone === '' || $phone === '0')
+                                            <span class="text-muted">—</span>
+                                        @else
+                                            <a href="tel:{{ $phone }}">{{ $phone }}</a>
+                                            @include('admin-views.partials._whatsapp-web-btn', [
+                                                'url' => $mentor->user->whatsappWebUrl('mentor'),
+                                                'title' => 'Contact mentor on WhatsApp',
+                                            ])
+                                        @endif
                                     </td>
                                     <td>{{ \Illuminate\Support\Str::limit($mentor->headline ?? '-', 45, '...') }}</td>
                                     <td class="text-center">{{ $mentor->services_count }}</td>

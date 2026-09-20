@@ -32,7 +32,7 @@ class MentorController extends Controller
         $queryParam = [];
         $search = $request->get('search');
 
-        $query = $this->mentor->withCount(['services', 'bookings'])->latest();
+        $query = $this->mentor->with('user')->withCount(['services', 'bookings'])->latest();
         if ($request->has('search') && $search) {
             $key = explode(' ', $search);
             $query->where(function ($q) use ($key) {
