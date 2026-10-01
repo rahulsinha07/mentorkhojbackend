@@ -500,6 +500,7 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::post('bookings/{id}/send-payment-email', [CustomerController::class, 'sendPaymentReminder'])->name('send-payment-email');
             Route::post('{user_id}/session-credits', [CustomerController::class, 'storeSessionCredits'])->name('session-credits.store');
             Route::post('{user_id}/session-credits/schedule', [CustomerController::class, 'scheduleFromCredits'])->name('session-credits.schedule');
+            Route::post('{user_id}/session-messaging-toggle', [CustomerController::class, 'toggleSessionMessaging'])->name('session-messaging.toggle');
             Route::post('bookings/{id}/complete', [CustomerController::class, 'completeBooking'])->name('bookings.complete');
             Route::post('bookings/{id}/reschedule', [CustomerController::class, 'rescheduleBooking'])->name('bookings.reschedule');
             Route::get('export', [CustomerController::class, 'exportCustomer'])->name('export');

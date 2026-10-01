@@ -7,6 +7,8 @@ use App\CentralLogics\CustomerBookingStats;
 use App\CentralLogics\CustomerProfileSync;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorBookingMailLogic;
+use App\CentralLogics\MentorSessionLifecycleLogic;
+use App\CentralLogics\SessionChatLogic;
 use App\CentralLogics\SessionCreditLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Conversation;
@@ -15,6 +17,7 @@ use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorBooking;
 use App\Model\Mentor\MentorSessionCredit;
 use App\Model\SessionChatMessage;
+use App\Model\SessionChatMessagingOverride;
 use App\Model\Newsletter;
 use App\Model\Order;
 use App\User;
@@ -156,11 +159,15 @@ class CustomerController extends Controller
                 ->limit(200)
                 ->get();
 
-            $sessionCredits = MentorSessionCredit::with('mentor')
+            $sessionCredits = MentorSessionCredit::with(['mentor.services' => function ($q) {
+                $q->where('is_enabled', true)->orderBy('sort_order');
+            }])
                 ->where('mentee_user_id', $id)
                 ->orderByDesc('updated_at')
                 ->get();
             $creditsRemainingTotal = $sessionCredits->sum(fn (MentorSessionCredit $c) => $c->remaining());
+
+            $messagingPairs = $this->messagingPairsForCustomer((int) $id, $sessionCredits, $demoBookings);
 
             $activeMentors = Mentor::query()
                 ->where('status', 'active')
@@ -177,10 +184,106 @@ class CustomerController extends Controller
                 'sessionChatMessages',
                 'sessionCredits',
                 'creditsRemainingTotal',
+                'messagingPairs',
                 'activeMentors'
             ));
         }
         Toastr::error(translate('Customer not found!'));
+        return back();
+    }
+
+    /**
+     * Mentor↔mentee messaging rows for admin toggle (packs + bookings + demos).
+     *
+     * @param  \Illuminate\Support\Collection<int, MentorSessionCredit>  $sessionCredits
+     * @param  \Illuminate\Support\Collection<int, DemoBooking>  $demoBookings
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    protected function messagingPairsForCustomer(int $menteeUserId, $sessionCredits, $demoBookings)
+    {
+        $mentorIds = collect();
+
+        foreach ($sessionCredits as $credit) {
+            $mentorIds->push((int) $credit->mentor_id);
+        }
+
+        $bookingMentorIds = MentorBooking::query()
+            ->where('mentee_user_id', $menteeUserId)
+            ->distinct()
+            ->pluck('mentor_id')
+            ->map(fn ($id) => (int) $id);
+        $mentorIds = $mentorIds->merge($bookingMentorIds);
+
+        $demoIds = $demoBookings->pluck('id');
+        if ($demoIds->isNotEmpty()) {
+            $demoMentorIds = \Illuminate\Support\Facades\DB::table('demo_booking_mentors')
+                ->whereIn('demo_booking_id', $demoIds)
+                ->pluck('mentor_id')
+                ->map(fn ($id) => (int) $id);
+            $mentorIds = $mentorIds->merge($demoMentorIds);
+        }
+
+        $mentorIds = $mentorIds->filter(fn ($id) => $id > 0)->unique()->values();
+        $mentors = Mentor::query()->whereIn('id', $mentorIds)->get()->keyBy('id');
+        $creditsByMentor = $sessionCredits->keyBy('mentor_id');
+
+        return $mentorIds->map(function (int $mentorId) use ($menteeUserId, $mentors, $creditsByMentor) {
+            $entitlement = SessionChatLogic::messagingEntitlement($menteeUserId, $mentorId);
+            $credit = $creditsByMentor->get($mentorId);
+
+            return [
+                'mentor_id' => $mentorId,
+                'mentor_name' => $mentors->get($mentorId)?->display_name ?? ('#'.$mentorId),
+                'has_pack' => $credit !== null,
+                'credits_total' => $credit?->credits_total ?? 0,
+                'credits_used' => $credit?->credits_used ?? 0,
+                'credits_remaining' => $credit ? $credit->remaining() : 0,
+                'available_to_schedule' => $credit ? $credit->availableToSchedule() : 0,
+                'fund_total' => $credit?->fund_total ?? 0,
+                'fund_used' => $credit?->fund_used ?? 0,
+                'fund_remaining' => $credit ? $credit->fundRemaining() : 0,
+                'per_session_net' => $credit ? $credit->currentSessionNetRate() : 0,
+                'credit' => $credit,
+                'entitlement' => $entitlement,
+                'messaging_active' => (bool) ($entitlement['active'] ?? false),
+                'messaging_label' => SessionChatLogic::entitlementLabel($entitlement),
+                'override' => $entitlement['override'] ?? null,
+            ];
+        })->values();
+    }
+
+    public function toggleSessionMessaging(Request $request, int $id): RedirectResponse
+    {
+        $validated = $request->validate([
+            'mentor_id' => 'required|integer|exists:mentors,id',
+            'enabled' => 'required|in:0,1',
+        ]);
+
+        $customer = $this->user->findOrFail($id);
+        $mentorId = (int) $validated['mentor_id'];
+        $enabled = (int) $validated['enabled'] === 1;
+
+        if (SessionChatLogic::isSupportMentor($mentorId)) {
+            Toastr::error(translate('Support chat cannot be toggled'));
+            return back();
+        }
+
+        SessionChatMessagingOverride::query()->updateOrCreate(
+            [
+                'mentee_user_id' => (int) $customer->id,
+                'mentor_id' => $mentorId,
+            ],
+            [
+                'override' => $enabled
+                    ? SessionChatMessagingOverride::FORCE_ON
+                    : SessionChatMessagingOverride::FORCE_OFF,
+            ]
+        );
+
+        Toastr::success($enabled
+            ? translate('Messaging enabled for this mentor–student pair')
+            : translate('Messaging disabled for this mentor–student pair'));
+
         return back();
     }
 
@@ -189,21 +292,42 @@ class CustomerController extends Controller
         $validated = $request->validate([
             'mentor_id' => 'required|integer|exists:mentors,id',
             'credits' => 'required|integer|min:1|max:500',
+            'total_amount' => 'required|numeric|min:0.01|max:9999999',
             'notes' => 'nullable|string|max:2000',
+            'schedule_now' => 'nullable|boolean',
+            'start_date' => 'required_if:schedule_now,1|nullable|date',
+            'start_time' => 'required_if:schedule_now,1|nullable|string|max:32',
+            'mentor_service_id' => 'nullable|integer',
         ]);
 
         $customer = $this->user->findOrFail($id);
         $mentor = Mentor::findOrFail($validated['mentor_id']);
 
         try {
-            SessionCreditLogic::grant(
+            $credit = SessionCreditLogic::grant(
                 $customer,
                 $mentor,
                 (int) $validated['credits'],
+                (float) $validated['total_amount'],
                 auth('admin')->id(),
                 $validated['notes'] ?? null
             );
-            Toastr::success(translate('Session credits added'));
+
+            if (!empty($validated['schedule_now'])) {
+                MentorSessionLifecycleLogic::ensurePackSessionRows($credit);
+                $mode = (string) ($request->input('mode') ?: 'one_off');
+                $count = $mode === 'one_off' ? 1 : (int) $validated['credits'];
+                SessionCreditLogic::scheduleSessions($credit->fresh(), [
+                    'mode' => $mode,
+                    'start_date' => $validated['start_date'],
+                    'start_time' => $validated['start_time'],
+                    'count' => $count,
+                    'mentor_service_id' => $validated['mentor_service_id'] ?? null,
+                    'mentee_note' => $validated['notes'] ?? null,
+                ]);
+            }
+
+            Toastr::success(translate('Sessions added'));
         } catch (\Throwable $e) {
             Toastr::error($e->getMessage());
         }
@@ -219,6 +343,7 @@ class CustomerController extends Controller
             'start_date' => 'required|date',
             'start_time' => 'required|string|max:32',
             'count' => 'nullable|integer|min:1|max:52',
+            'duration_minutes' => 'nullable|integer|min:5|max:480',
             'mentor_service_id' => 'nullable|integer',
             'mentee_note' => 'nullable|string|max:2000',
         ]);
@@ -228,10 +353,8 @@ class CustomerController extends Controller
             ->firstOrFail();
 
         try {
+            MentorSessionLifecycleLogic::ensurePackSessionRows($credit);
             $bookings = SessionCreditLogic::scheduleSessions($credit, $validated);
-            foreach ($bookings as $booking) {
-                MentorBookingMailLogic::sendScheduleConfirmedNotify($booking->fresh(['mentor.user', 'service', 'mentee']), true);
-            }
             Toastr::success(translate('Scheduled').' '.$bookings->count().' '.translate('session(s)'));
         } catch (\Throwable $e) {
             Toastr::error($e->getMessage());

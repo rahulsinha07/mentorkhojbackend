@@ -28,7 +28,7 @@
 
                 <div class="col-auto ml-auto d-flex flex-wrap gap-2">
                     <button type="button" class="btn btn-sm btn--primary" data-toggle="modal" data-target="#addSessionCreditsModal">
-                        <i class="tio-add"></i> {{ translate('Add session credits') }}
+                        <i class="tio-add"></i> {{ translate('Add sessions') }}
                     </button>
                     @if(($sessionCredits ?? collect())->isNotEmpty())
                         <button type="button" class="btn btn-sm btn-soft-info" data-toggle="modal" data-target="#scheduleFromCreditsModal">
@@ -86,7 +86,7 @@
             <div class="col-lg-3 col-md-6 col-sm-6">
                 <div class="resturant-card bg--1">
                     <img class="resturant-icon" src="{{asset('/public/assets/admin/img/dashboard/4.png')}}" alt="{{ translate('image') }}" onerror="this.style.display='none'">
-                    <div class="for-card-text font-weight-bold  text-uppercase mb-1">{{ translate('Credits remaining') }}</div>
+                    <div class="for-card-text font-weight-bold  text-uppercase mb-1">{{ translate('Sessions remaining') }}</div>
                     <div class="for-card-count">{{ (int) ($creditsRemainingTotal ?? 0) }}</div>
                 </div>
             </div>
@@ -96,8 +96,8 @@
             <div class="col-lg-8 mb-3 mb-lg-0">
                 <div class="card mb-3">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">{{ translate('Session credits') }}
-                            <span class="badge badge-soft-secondary">{{ ($sessionCredits ?? collect())->count() }}</span>
+                        <h5 class="card-title mb-0">{{ translate('Session packs') }}
+                            <span class="badge badge-soft-secondary">{{ ($messagingPairs ?? $sessionCredits ?? collect())->count() }}</span>
                         </h5>
                         <div>
                             <button type="button" class="btn btn-xs btn--primary" data-toggle="modal" data-target="#addSessionCreditsModal">{{ translate('Add') }}</button>
@@ -115,20 +115,51 @@
                                 <th class="text-center">{{ translate('Used') }}</th>
                                 <th class="text-center">{{ translate('Remaining') }}</th>
                                 <th class="text-center">{{ translate('Available to schedule') }}</th>
+                                <th class="text-right">{{ translate('Fund Total') }}</th>
+                                <th class="text-right">{{ translate('Fund Used') }}</th>
+                                <th class="text-right">{{ translate('Fund Remaining') }}</th>
+                                <th class="text-right">{{ translate('Per Session (net)') }}</th>
+                                <th class="text-center">{{ translate('Messaging') }}</th>
                             </tr>
                             </thead>
                             <tbody>
-                            @forelse(($sessionCredits ?? collect()) as $credit)
+                            @forelse(($messagingPairs ?? collect()) as $pair)
+                                @php
+                                    $messagingOn = (bool) ($pair['messaging_active'] ?? false);
+                                    $toggleTo = $messagingOn ? 0 : 1;
+                                @endphp
                                 <tr>
-                                    <td>{{ $credit->mentor?->display_name ?? ('#'.$credit->mentor_id) }}</td>
-                                    <td class="text-center">{{ $credit->credits_total }}</td>
-                                    <td class="text-center">{{ $credit->credits_used }}</td>
-                                    <td class="text-center"><strong>{{ $credit->remaining() }}</strong></td>
-                                    <td class="text-center">{{ $credit->availableToSchedule() }}</td>
+                                    <td>
+                                        {{ $pair['mentor_name'] ?? ('#'.$pair['mentor_id']) }}
+                                        @if(empty($pair['has_pack']))
+                                            <span class="badge badge-soft-secondary">{{ translate('No pack') }}</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">{{ $pair['credits_total'] ?? 0 }}</td>
+                                    <td class="text-center">{{ $pair['credits_used'] ?? 0 }}</td>
+                                    <td class="text-center"><strong>{{ $pair['credits_remaining'] ?? 0 }}</strong></td>
+                                    <td class="text-center">{{ $pair['available_to_schedule'] ?? 0 }}</td>
+                                    <td class="text-right">{{ Helpers::set_symbol($pair['fund_total'] ?? 0) }}</td>
+                                    <td class="text-right">{{ Helpers::set_symbol($pair['fund_used'] ?? 0) }}</td>
+                                    <td class="text-right"><strong>{{ Helpers::set_symbol($pair['fund_remaining'] ?? 0) }}</strong></td>
+                                    <td class="text-right">{{ Helpers::set_symbol($pair['per_session_net'] ?? 0) }}</td>
+                                    <td class="text-center">
+                                        <form method="post" action="{{ route('admin.customer.session-messaging.toggle', $customer->id) }}" class="d-inline-flex flex-column align-items-center gap-1">
+                                            @csrf
+                                            <input type="hidden" name="mentor_id" value="{{ $pair['mentor_id'] }}">
+                                            <input type="hidden" name="enabled" value="{{ $toggleTo }}">
+                                            <button type="submit"
+                                                    class="btn btn-xs btn-{{ $messagingOn ? 'success' : 'secondary' }}"
+                                                    onclick="return confirm('{{ $messagingOn ? translate('Disable messaging for this mentor–student pair?') : translate('Enable messaging for this mentor–student pair?') }}');">
+                                                {{ $messagingOn ? translate('Enabled') : translate('Disabled') }}
+                                            </button>
+                                            <small class="text-muted">{{ $pair['messaging_label'] ?? '' }}</small>
+                                        </form>
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="text-center p-3 text-muted">{{ translate('No session credits yet') }}</td>
+                                    <td colspan="10" class="text-center p-3 text-muted">{{ translate('No sessions booked yet') }}</td>
                                 </tr>
                             @endforelse
                             </tbody>
@@ -162,8 +193,8 @@
                                     <td>{{ $mentorBookings->firstItem() + $key }}</td>
                                     <td>
                                         {{ $booking->mentor?->display_name ?? '—' }}
-                                        @if(($booking->booking_source ?? 'paid') === 'credit')
-                                            <span class="badge badge-soft-primary">{{ translate('credit') }}</span>
+                                        @if(in_array($booking->booking_source ?? 'paid', ['credit', 'session']))
+                                            <span class="badge badge-soft-primary">{{ translate('Session') }}</span>
                                         @endif
                                     </td>
                                     <td>{{ $booking->service?->title ?? '—' }}</td>
@@ -173,7 +204,12 @@
                                             <br><small>{{ substr($booking->preferred_time, 0, 5) }}</small>
                                         @endif
                                     </td>
-                                    <td class="text-right">{{ Helpers::set_symbol($booking->amount + $booking->tax_amount) }}</td>
+                                    <td class="text-right">
+                                        {{ Helpers::set_symbol($booking->amount + $booking->tax_amount) }}
+                                        @if(in_array($booking->booking_source ?? 'paid', ['credit', 'session']) && $booking->mentor_net > 0)
+                                            <br><small class="text-muted">{{ translate('Mentor net') }}: {{ Helpers::set_symbol($booking->mentor_net) }}</small>
+                                        @endif
+                                    </td>
                                     <td class="text-center">
                                         <span class="badge badge-soft-{{ $booking->payment_status === 'paid' ? 'success' : ($booking->payment_status === 'failed' ? 'danger' : 'warning') }}">
                                             {{ $booking->payment_status }}
@@ -480,11 +516,11 @@
             <form method="post" action="{{ route('admin.customer.session-credits.store', $customer->id) }}" class="modal-content">
                 @csrf
                 <div class="modal-header">
-                    <h5 class="modal-title">{{ translate('Add session credits') }}</h5>
+                    <h5 class="modal-title">{{ translate('Add sessions') }}</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small">{{ translate('Each credit = 1 session with the selected mentor. Credits decrease when a session is marked complete.') }}</p>
+                    <p class="text-muted small">{{ translate('Each session = 1 booked slot with the selected mentor. Remaining count decreases when a session is marked complete.') }}</p>
                     <div class="form-group">
                         <label>{{ translate('Mentor') }}</label>
                         <select name="mentor_id" class="form-control" required>
@@ -495,8 +531,49 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>{{ translate('Credits') }}</label>
-                        <input type="number" name="credits" class="form-control" min="1" max="500" value="10" required>
+                        <label>{{ translate('Sessions') }}</label>
+                        <input type="number" name="credits" id="sessionCreditsCount" class="form-control" min="1" max="500" value="10" required>
+                    </div>
+                    <div class="form-group">
+                        <label>{{ translate('Total Amount') }} (₹)</label>
+                        <input type="number" name="total_amount" id="sessionCreditsTotalAmount" class="form-control" min="0.01" step="0.01" value="10000" required>
+                    </div>
+                    <div class="alert alert-soft-info py-2 px-3 mb-3" id="sessionCreditsFundPreview">
+                        <div class="small mb-1"><strong>{{ translate('Fund breakdown') }}</strong></div>
+                        <div class="small" id="fundPreviewLines"></div>
+                        <div class="small text-muted mt-2">{{ translate('Mentor balance increases by the net amount when each session is marked complete.') }}</div>
+                    </div>
+
+                    <div class="border rounded p-3 mb-3">
+                        <div class="custom-control custom-checkbox mb-2">
+                            <input type="checkbox" class="custom-control-input" id="scheduleNowCheck" name="schedule_now" value="1">
+                            <label class="custom-control-label" for="scheduleNowCheck">{{ translate('Schedule sessions now') }}</label>
+                        </div>
+                        <div id="scheduleNowFields" style="display:none;">
+                            <p class="text-muted small mb-2">{{ translate('Assign date and time when creating the pack (IST).') }}</p>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>{{ translate('Start date') }}</label>
+                                        <input type="date" name="start_date" class="form-control">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>{{ translate('Start time') }}</label>
+                                        <input type="time" name="start_time" class="form-control">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group mb-0">
+                                <label>{{ translate('Schedule mode') }}</label>
+                                <select name="mode" class="form-control">
+                                    <option value="one_off">{{ translate('One session only') }}</option>
+                                    <option value="weekly">{{ translate('Weekly (all sessions)') }}</option>
+                                    <option value="daily">{{ translate('Daily (all sessions)') }}</option>
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     <div class="form-group mb-0">
                         <label>{{ translate('Notes') }}</label>
@@ -505,27 +582,36 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ translate('Close') }}</button>
-                    <button type="submit" class="btn btn--primary">{{ translate('Add credits') }}</button>
+                    <button type="submit" class="btn btn--primary">{{ translate('Add sessions') }}</button>
                 </div>
             </form>
         </div>
     </div>
 
     <div class="modal fade" id="scheduleFromCreditsModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-lg" role="document">
-            <form method="post" action="{{ route('admin.customer.session-credits.schedule', $customer->id) }}" class="modal-content" id="scheduleFromCreditsForm">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+            <form method="post" action="{{ route('admin.customer.session-credits.schedule', $customer->id) }}" class="modal-content" id="scheduleFromCreditsForm" novalidate>
                 @csrf
                 <div class="modal-header">
-                    <h5 class="modal-title">{{ translate('Schedule sessions from credits') }}</h5>
+                    <h5 class="modal-title">{{ translate('Schedule sessions') }}</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>{{ translate('Credit pack / mentor') }}</label>
-                        <select name="credit_id" class="form-control" required>
+                        <label>{{ translate('Session pack / mentor') }}</label>
+                        <select name="credit_id" id="scheduleCreditId" class="form-control" required>
                             <option value="">{{ translate('Select') }}</option>
                             @foreach(($sessionCredits ?? collect()) as $credit)
-                                <option value="{{ $credit->id }}" data-available="{{ $credit->availableToSchedule() }}">
+                                @php
+                                    $packDuration = 20;
+                                    $mentorServices = $credit->mentor?->services ?? collect();
+                                    if ($mentorServices->isNotEmpty()) {
+                                        $packDuration = (int) ($mentorServices->first()->duration_minutes ?: 20);
+                                    }
+                                @endphp
+                                <option value="{{ $credit->id }}"
+                                    data-available="{{ $credit->availableToSchedule() }}"
+                                    data-duration="{{ $packDuration }}">
                                     {{ $credit->mentor?->display_name ?? ('#'.$credit->mentor_id) }}
                                     — {{ translate('available') }}: {{ $credit->availableToSchedule() }}
                                 </option>
@@ -534,17 +620,14 @@
                     </div>
                     <div class="form-group">
                         <label>{{ translate('Schedule mode') }}</label>
-                        <div class="btn-group btn-group-toggle d-flex flex-wrap" data-toggle="buttons">
-                            <label class="btn btn-outline-primary active">
-                                <input type="radio" name="mode" value="one_off" checked> {{ translate('One-off') }}
-                            </label>
-                            <label class="btn btn-outline-primary">
-                                <input type="radio" name="mode" value="daily"> {{ translate('Daily connect') }}
-                            </label>
-                            <label class="btn btn-outline-primary">
-                                <input type="radio" name="mode" value="weekly"> {{ translate('Weekly connect') }}
-                            </label>
-                        </div>
+                        <select name="mode" id="scheduleMode" class="form-control">
+                            <option value="one_off">{{ translate('One-off') }}</option>
+                            <option value="daily">{{ translate('Daily connect') }}</option>
+                            <option value="weekly">{{ translate('Weekly connect') }}</option>
+                        </select>
+                        <small class="form-text text-muted" id="scheduleModeHint" style="display:none;">
+                            {{ translate('Weekly: same day and meeting time each week (IST)') }}
+                        </small>
                     </div>
                     <div class="row">
                         <div class="col-md-6">
@@ -555,15 +638,27 @@
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>{{ translate('Time') }}</label>
+                                <label>{{ translate('Meeting time (IST)') }}</label>
                                 <input type="time" name="start_time" id="scheduleStartTime" class="form-control" required>
                             </div>
                         </div>
                     </div>
-                    <div class="form-group" id="scheduleCountGroup" style="display:none;">
-                        <label>{{ translate('Number of sessions') }}</label>
-                        <input type="number" name="count" id="scheduleCount" class="form-control" min="1" max="52" value="4">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group" id="scheduleCountGroup" style="display:none;">
+                                <label>{{ translate('Number of sessions') }}</label>
+                                <input type="number" name="count" id="scheduleCount" class="form-control" min="1" max="52" value="1">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>{{ translate('Duration per session (minutes)') }}</label>
+                                <input type="number" name="duration_minutes" id="scheduleDurationMinutes" class="form-control" min="5" max="480" value="20" required>
+                                <small class="form-text text-muted">{{ translate('Shown on mentor and student session pages') }}</small>
+                            </div>
+                        </div>
                     </div>
+                    <div class="alert alert-soft-info py-2 px-3 small mb-3" id="scheduleSlotPreview" style="display:none;"></div>
                     <div class="form-group mb-0">
                         <label>{{ translate('Note') }}</label>
                         <input type="text" name="mentee_note" class="form-control" maxlength="2000" placeholder="{{ translate('Optional') }}">
@@ -571,7 +666,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">{{ translate('Close') }}</button>
-                    <button type="submit" class="btn btn--primary">{{ translate('Schedule') }}</button>
+                    <button type="submit" class="btn btn--primary" id="scheduleFromCreditsSubmit">{{ translate('Schedule') }}</button>
                 </div>
             </form>
         </div>
@@ -630,11 +725,151 @@
             const parts = nowDateTimeParts();
             $('#scheduleStartDate').attr('min', parts.date).val(parts.date);
             $('#scheduleStartTime').val(parts.time);
+            $('#scheduleMode').val('one_off');
+            const $credit = $('#scheduleCreditId');
+            const $firstAvailable = $credit.find('option[value!=""]').filter(function () {
+                return parseInt($(this).attr('data-available'), 10) > 0;
+            }).first();
+            if ($firstAvailable.length) {
+                $credit.val($firstAvailable.val());
+                $('#scheduleDurationMinutes').val($firstAvailable.attr('data-duration') || 20);
+            } else {
+                $credit.val('');
+            }
+            syncScheduleFromCreditsForm();
         });
 
-        $('#scheduleFromCreditsForm input[name="mode"]').on('change', function () {
-            const mode = $('#scheduleFromCreditsForm input[name="mode"]:checked').val();
-            $('#scheduleCountGroup').toggle(mode !== 'one_off');
+        function scheduleSelectedCreditOption() {
+            return $('#scheduleCreditId option:selected');
+        }
+
+        function scheduleAvailableCount() {
+            const n = parseInt(scheduleSelectedCreditOption().attr('data-available'), 10);
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        }
+
+        function scheduleDefaultDuration() {
+            const d = parseInt(scheduleSelectedCreditOption().attr('data-duration'), 10);
+            return Number.isFinite(d) && d > 0 ? d : 20;
+        }
+
+        function formatIstTimeLabel(timeVal) {
+            if (!timeVal) return '';
+            const parts = timeVal.split(':');
+            let h = parseInt(parts[0], 10);
+            const m = parts[1] || '00';
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            h = h % 12;
+            if (h === 0) h = 12;
+            return h + ':' + m + ' ' + ampm + ' IST';
+        }
+
+        function formatIstDateLabel(dateVal) {
+            if (!dateVal) return '';
+            const d = new Date(dateVal + 'T12:00:00');
+            if (Number.isNaN(d.getTime())) return dateVal;
+            return d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        }
+
+        function addScheduleDays(dateVal, days) {
+            const d = new Date(dateVal + 'T12:00:00');
+            d.setDate(d.getDate() + days);
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        }
+
+        function addScheduleWeeks(dateVal, weeks) {
+            return addScheduleDays(dateVal, weeks * 7);
+        }
+
+        function syncScheduleFromCreditsForm() {
+            const mode = $('#scheduleMode').val() || 'one_off';
+            const isSeries = mode !== 'one_off';
+            const available = scheduleAvailableCount();
+            const maxCount = Math.min(52, Math.max(available, 1));
+            const $count = $('#scheduleCount');
+
+            $('#scheduleCountGroup').toggle(isSeries);
+            $('#scheduleModeHint').toggle(mode === 'weekly');
+
+            if (isSeries) {
+                $count.prop('disabled', false);
+                $count.attr('max', maxCount);
+                const current = parseInt($count.val(), 10) || 1;
+                $count.val(Math.min(Math.max(1, current), maxCount));
+            } else {
+                $count.prop('disabled', true);
+                $count.removeAttr('max');
+                $count.val(1);
+            }
+
+            const canSubmit = available > 0 && $('#scheduleCreditId').val();
+            $('#scheduleFromCreditsSubmit').prop('disabled', !canSubmit);
+
+            const dateVal = $('#scheduleStartDate').val();
+            const timeVal = $('#scheduleStartTime').val();
+            const durationVal = parseInt($('#scheduleDurationMinutes').val(), 10) || 20;
+            const count = isSeries ? Math.min(parseInt($count.val(), 10) || 1, maxCount) : 1;
+
+            if (!dateVal || !timeVal || mode === 'one_off') {
+                $('#scheduleSlotPreview').hide().empty();
+                return;
+            }
+
+            const lines = [];
+            const previewN = Math.min(count, 3);
+            for (let i = 0; i < previewN; i++) {
+                let slotDate = dateVal;
+                if (mode === 'daily') slotDate = addScheduleDays(dateVal, i);
+                if (mode === 'weekly') slotDate = addScheduleWeeks(dateVal, i);
+                lines.push('{{ translate('Session') }} ' + (i + 1) + ': ' + formatIstDateLabel(slotDate) + ' · ' + formatIstTimeLabel(timeVal) + ' · ' + durationVal + ' min');
+            }
+            if (count > previewN) {
+                lines.push('… ' + (count - previewN) + ' {{ translate('more at the same meeting time') }}');
+            }
+            $('#scheduleSlotPreview').html(lines.join('<br>')).show();
+        }
+
+        $('#scheduleCreditId, #scheduleMode, #scheduleStartDate, #scheduleStartTime, #scheduleCount, #scheduleDurationMinutes').on('change input', syncScheduleFromCreditsForm);
+
+        $('#scheduleCreditId').on('change', function () {
+            const maxCount = Math.min(52, Math.max(scheduleAvailableCount(), 1));
+            $('#scheduleCount').val(maxCount > 0 ? maxCount : 1);
+            $('#scheduleDurationMinutes').val(scheduleDefaultDuration());
+            syncScheduleFromCreditsForm();
+        });
+
+        $('#scheduleFromCreditsForm').on('submit', function (e) {
+            const creditId = $('#scheduleCreditId').val();
+            const available = scheduleAvailableCount();
+            const mode = $('#scheduleMode').val() || 'one_off';
+            const isSeries = mode !== 'one_off';
+            const count = isSeries ? parseInt($('#scheduleCount').val(), 10) || 1 : 1;
+
+            if (!creditId) {
+                e.preventDefault();
+                alert('{{ translate('Please select a session pack') }}');
+                return false;
+            }
+            if (available < 1) {
+                e.preventDefault();
+                alert('{{ translate('No sessions available to schedule for this pack') }}');
+                return false;
+            }
+            if (isSeries && count > available) {
+                e.preventDefault();
+                alert('{{ translate('Only') }} ' + available + ' {{ translate('session(s) available to schedule') }}.');
+                return false;
+            }
+            if (!$('#scheduleStartDate').val() || !$('#scheduleStartTime').val()) {
+                e.preventDefault();
+                alert('{{ translate('Start date and meeting time are required') }}');
+                return false;
+            }
+            if (isSeries) {
+                $('#scheduleCount').prop('disabled', false);
+            }
+            $('#scheduleFromCreditsSubmit').prop('disabled', true).text('{{ translate('Scheduling') }}…');
+            return true;
         });
 
         $('#rescheduleBookingModal').on('show.bs.modal', function (event) {
@@ -645,5 +880,40 @@
             $('#rescheduleTime').val(button.data('time') || parts.time);
             $('#rescheduleBookingForm').attr('action', @json(route('admin.customer.bookings.reschedule', ['id' => '__ID__'])).replace('__ID__', bookingId));
         });
+
+        const platformFeePercent = {{ (float) \App\CentralLogics\MentorLogic::platformFeePercent() }};
+
+        function formatRupee(amount) {
+            return '₹' + (Number(amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function updateSessionCreditsFundPreview() {
+            const credits = Math.max(1, parseInt($('#sessionCreditsCount').val(), 10) || 1);
+            const total = Math.max(0, parseFloat($('#sessionCreditsTotalAmount').val()) || 0);
+            const perSessionGross = total / credits;
+            const perSessionFee = perSessionGross * (platformFeePercent / 100);
+            const perSessionNet = perSessionGross - perSessionFee;
+
+            $('#fundPreviewLines').html(
+                '{{ translate('Total fund') }}: <strong>' + formatRupee(total) + '</strong><br>' +
+                '{{ translate('Sessions') }}: <strong>' + credits + '</strong><br>' +
+                '{{ translate('Per session gross') }}: <strong>' + formatRupee(perSessionGross) + '</strong><br>' +
+                '{{ translate('Platform fee') }} (' + platformFeePercent + '%): <strong>− ' + formatRupee(perSessionFee) + '</strong><br>' +
+                '{{ translate('Mentor earns per session') }}: <strong>' + formatRupee(perSessionNet) + '</strong>'
+            );
+        }
+
+        $('#sessionCreditsCount, #sessionCreditsTotalAmount').on('input change', updateSessionCreditsFundPreview);
+        updateSessionCreditsFundPreview();
     </script>
 @endpush
+<script>
+(function(){
+  var cb = document.getElementById('scheduleNowCheck');
+  var fields = document.getElementById('scheduleNowFields');
+  if (!cb || !fields) return;
+  function sync(){ fields.style.display = cb.checked ? 'block' : 'none'; }
+  cb.addEventListener('change', sync);
+  sync();
+})();
+</script>
