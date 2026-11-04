@@ -54,12 +54,73 @@
             </div>
         </div>
 
-        <div class="card">
+        <div class="card mb-3">
+            <div class="card-header border-0">
+                <h5 class="mb-0">{{ translate('Session packs — overall, till now') }}</h5>
+                <small class="text-muted">{{ translate('Money committed when a pack is assigned/paid — separate from earnings above, which only count completed sessions.') }}</small>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <small class="text-muted d-block">{{ translate('Active packs') }}</small>
+                        <h5 class="mb-0">{{ $activePacksCount }}</h5>
+                    </div>
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <small class="text-muted d-block">{{ translate('Total packs (paid)') }}</small>
+                        <h5 class="mb-0">{{ $totalPacksCount }}</h5>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <small class="text-muted d-block">{{ translate('Total amount added') }}</small>
+                        <h5 class="mb-0">{{ Helpers::set_symbol($totalAmountAdded) }}</h5>
+                    </div>
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <small class="text-muted d-block">{{ translate('Sessions added') }}</small>
+                        <h5 class="mb-0">{{ $totalSessionsAdded }}</h5>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <small class="text-muted d-block">{{ translate('Sessions completed') }}</small>
+                        <h5 class="mb-0">{{ $totalSessionsCompleted }} / {{ $totalSessionsAdded }}</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
             <div class="card-header border-0">
                 <h5 class="mb-0">{{ translate('Monthly trend (last 12 months)') }}</h5>
             </div>
             <div class="card-body">
                 <div id="earnings-line-chart" style="min-height: 320px;"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header border-0">
+                <h5 class="mb-0">{{ translate('Monthly breakdown') }}</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-borderless table-thead-bordered table-nowrap card-table">
+                    <thead class="thead-light">
+                    <tr>
+                        <th>{{ translate('Month') }}</th>
+                        <th class="text-right">{{ translate('Sessions completed') }}</th>
+                        <th class="text-right">{{ translate('Revenue') }}</th>
+                        <th class="text-right">{{ translate('Platform fee') }}</th>
+                        <th class="text-right">{{ translate('Mentor payout') }}</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach(array_reverse($monthlyBreakdown) as $row)
+                        <tr @if($row['label'] === now()->format('M Y')) class="table-active" @endif>
+                            <td>{{ $row['label'] }}</td>
+                            <td class="text-right">{{ $row['sessions'] }}</td>
+                            <td class="text-right">{{ Helpers::set_symbol($row['revenue']) }}</td>
+                            <td class="text-right">{{ Helpers::set_symbol($row['fee']) }}</td>
+                            <td class="text-right">{{ Helpers::set_symbol($row['net']) }}</td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

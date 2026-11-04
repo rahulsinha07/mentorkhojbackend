@@ -24,6 +24,7 @@ class MentorSessionCredit extends Model
         'payment_status',
         'payment_confirmed_at',
         'payment_confirmed_by_admin_id',
+        'last_granted_at',
     ];
 
     protected $casts = [
@@ -33,6 +34,7 @@ class MentorSessionCredit extends Model
         'fund_used' => 'float',
         'platform_fee_percent' => 'float',
         'payment_confirmed_at' => 'datetime',
+        'last_granted_at' => 'datetime',
     ];
 
     public function isPaymentConfirmed(): bool

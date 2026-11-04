@@ -53,6 +53,7 @@
                     <thead class="thead-light">
                     <tr>
                         <th>{{ translate('Pack') }}</th>
+                        <th>{{ translate('Assigned') }}</th>
                         <th>{{ translate('Mentor') }}</th>
                         <th>{{ translate('Student') }}</th>
                         <th>{{ translate('Progress') }}</th>
@@ -74,6 +75,9 @@
                         <tr>
                             <td>
                                 <a href="{{ route('admin.session-packs.show', $pack->id) }}">#{{ $pack->id }}</a>
+                            </td>
+                            <td>
+                                <small>{{ ($pack->last_granted_at ?? $pack->created_at)?->format('d M Y, h:i A') }}</small>
                             </td>
                             <td>
                                 @if($pack->mentor)
@@ -123,7 +127,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="text-center p-4 text-muted">
+                            <td colspan="9" class="text-center p-4 text-muted">
                                 {{ translate('No session packs found') }}
                             </td>
                         </tr>

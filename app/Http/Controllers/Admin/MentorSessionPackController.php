@@ -37,9 +37,10 @@ class MentorSessionPackController extends Controller
             });
         }
 
-        // Packs with sessions still pending come first, then most recently active.
-        $query->orderByRaw('(credits_used < credits_total) DESC')
-            ->orderByDesc('updated_at');
+        // Most recently assigned pack first (last_granted_at is only ever
+        // touched by SessionCreditLogic::grant(), unlike updated_at which
+        // also moves on payment toggles and session completions).
+        $query->orderByRaw('COALESCE(last_granted_at, created_at) DESC');
 
         $packs = $query->paginate(Helpers::getPagination())->appends($request->query());
 

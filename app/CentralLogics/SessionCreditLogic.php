@@ -110,6 +110,10 @@ class SessionCreditLogic
                 $credit->payment_confirmed_at = now();
                 $credit->payment_confirmed_by_admin_id = $adminId;
             }
+            // Drives the "most recently assigned" sort on /admin/session-packs —
+            // unlike updated_at, this is only ever touched here, never by
+            // payment toggles or session-completion saves on the same row.
+            $credit->last_granted_at = now();
             $credit->save();
 
             MentorSessionCreditLedger::create([
