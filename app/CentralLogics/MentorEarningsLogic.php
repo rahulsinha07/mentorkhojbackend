@@ -4,6 +4,7 @@ namespace App\CentralLogics;
 
 use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorBooking;
+use App\Model\Mentor\MentorDocumentPurchase;
 use App\Model\Mentor\MentorEarning;
 use App\Model\Mentor\MentorPayout;
 
@@ -22,13 +23,26 @@ class MentorEarningsLogic
         ]);
     }
 
+    public static function creditDocumentPurchase(MentorDocumentPurchase $purchase): MentorEarning
+    {
+        return MentorEarning::create([
+            'mentor_id' => $purchase->mentor_id,
+            'mentor_document_purchase_id' => $purchase->id,
+            'type' => 'document',
+            'gross' => $purchase->amount,
+            'fee' => $purchase->platform_fee,
+            'net' => $purchase->mentor_net,
+            'status' => 'completed',
+        ]);
+    }
+
     public static function summary(Mentor $mentor): array
     {
         $gross = (float) MentorEarning::where('mentor_id', $mentor->id)
-            ->whereIn('type', ['booking'])
+            ->whereIn('type', ['booking', 'document'])
             ->sum('gross');
         $fees = (float) MentorEarning::where('mentor_id', $mentor->id)
-            ->whereIn('type', ['booking'])
+            ->whereIn('type', ['booking', 'document'])
             ->sum('fee');
         $net = (float) MentorEarning::where('mentor_id', $mentor->id)
             ->where('status', 'completed')

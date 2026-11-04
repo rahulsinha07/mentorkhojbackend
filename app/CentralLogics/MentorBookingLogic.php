@@ -21,7 +21,18 @@ class MentorBookingLogic
      */
     public static function resolvePayableAmounts(Mentor $mentor, MentorService $service): array
     {
-        $servicePrice = (float) $service->price;
+        return self::resolvePayableAmountsForPrice($mentor, (float) $service->price);
+    }
+
+    /**
+     * Resolve charge amounts for any priced item (session or document bundle).
+     * Free items (price <= 0) → amount 10 + GST; mentor_net 0 (fee is platform-only).
+     *
+     * @return array{amount: float, tax_amount: float, platform_fee: float, mentor_net: float, total: float, is_free_session: bool}
+     */
+    public static function resolvePayableAmountsForPrice(Mentor $mentor, float $price): array
+    {
+        $servicePrice = $price;
 
         if ($servicePrice <= 0) {
             $amount = self::FREE_SESSION_PLATFORM_FEE_INR;

@@ -384,6 +384,14 @@ class OrderController extends Controller
                 );
             }
 
+            if ($order && !empty($request['mentor_document_purchase_ids']) && is_array($request['mentor_document_purchase_ids'])) {
+                \App\CentralLogics\MentorDocumentLogic::syncPurchasesFromLegacyOrder(
+                    $request['mentor_document_purchase_ids'],
+                    $order,
+                    (bool) auth('api')->user() ? auth('api')->user()->id : null
+                );
+            }
+
             DB::commit();
 
             if ((bool)auth('api')->user()){

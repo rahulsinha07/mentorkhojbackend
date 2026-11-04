@@ -34,7 +34,10 @@ class MentorEarningsAdminController extends Controller
         // in the full pack amount the moment its payment is confirmed
         // instead, consistent with how direct bookings are already treated.
         $directEarnings = MentorEarning::query()
-            ->whereHas('booking', fn ($q) => $q->whereNull('session_credit_id'))
+            ->where(function ($q) {
+                $q->where('type', 'document')
+                    ->orWhereHas('booking', fn ($q2) => $q2->whereNull('session_credit_id'));
+            })
             ->get(['gross', 'fee', 'net', 'created_at']);
 
         $paidPacks = MentorSessionCredit::query()

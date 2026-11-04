@@ -18,6 +18,7 @@ class MentorEarning extends Model
     protected $fillable = [
         'mentor_id',
         'mentor_booking_id',
+        'mentor_document_purchase_id',
         'type',
         'gross',
         'fee',
@@ -33,5 +34,10 @@ class MentorEarning extends Model
     public function booking(): BelongsTo
     {
         return $this->belongsTo(MentorBooking::class, 'mentor_booking_id');
+    }
+
+    public function documentPurchase(): BelongsTo
+    {
+        return $this->belongsTo(MentorDocumentPurchase::class, 'mentor_document_purchase_id');
     }
 }

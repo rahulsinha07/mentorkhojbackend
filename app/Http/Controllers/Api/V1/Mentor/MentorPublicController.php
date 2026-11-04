@@ -94,6 +94,24 @@ class MentorPublicController extends Controller
         ]);
     }
 
+    public function documents(string $usernameOrId): JsonResponse
+    {
+        $mentor = MentorLogic::resolveMentor($usernameOrId);
+        if (!$mentor || !$mentor->is_published) {
+            return response()->json(['errors' => [['code' => 'not_found', 'message' => 'Mentor not found']]], 404);
+        }
+
+        return response()->json([
+            'documents' => $mentor->enabledDocuments->map(fn ($d) => [
+                'id' => $d->id,
+                'title' => $d->title,
+                'description' => $d->description,
+                'price' => $d->price,
+                'file_count' => $d->files->count(),
+            ])->values(),
+        ]);
+    }
+
     public function checkUsername(string $username): JsonResponse
     {
         $available = !Mentor::where('username', $username)->exists();

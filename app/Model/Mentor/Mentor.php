@@ -63,6 +63,18 @@ class Mentor extends Model
         return $this->hasMany(MentorBooking::class);
     }
 
+    public function documents(): HasMany
+    {
+        return $this->hasMany(MentorDocument::class)->orderBy('sort_order');
+    }
+
+    public function enabledDocuments(): HasMany
+    {
+        return $this->hasMany(MentorDocument::class)
+            ->where('is_enabled', true)
+            ->orderBy('sort_order');
+    }
+
     public function earnings(): HasMany
     {
         return $this->hasMany(MentorEarning::class);

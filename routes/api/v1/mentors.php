@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\V1\Mentor\MentorAdminController;
 use App\Http\Controllers\Api\V1\Mentor\MentorBookingController;
 use App\Http\Controllers\Api\V1\Mentor\MentorDashboardController;
+use App\Http\Controllers\Api\V1\Mentor\MentorDocumentController;
+use App\Http\Controllers\Api\V1\Mentor\MentorDocumentManagementController;
 use App\Http\Controllers\Api\V1\Mentor\MentorEarningsController;
 use App\Http\Controllers\Api\V1\Mentor\MentorFavoriteController;
 use App\Http\Controllers\Api\V1\Mentor\MentorPublicController;
@@ -19,10 +21,16 @@ Route::group(['namespace' => 'Api\V1\Mentor'], function () {
         Route::get('share-templates', [MentorPublicController::class, 'shareTemplates']);
         Route::get('{usernameOrId}/photo', [MentorPublicController::class, 'photo']);
         Route::get('{usernameOrId}/services', [MentorPublicController::class, 'services']);
+        Route::get('{usernameOrId}/documents', [MentorPublicController::class, 'documents']);
         Route::get('{usernameOrId}', [MentorPublicController::class, 'show']);
 
         Route::group(['middleware' => ['auth:api', 'customer_is_block']], function () {
             Route::post('{id}/book', [MentorBookingController::class, 'book']);
+            Route::post('{id}/documents/{documentId}/purchase', [MentorDocumentController::class, 'purchase']);
+            Route::get('my/document-purchases/{id}/checkout-context', [MentorDocumentController::class, 'checkoutContext']);
+            Route::post('my/document-purchases/{id}/verify-payment', [MentorDocumentController::class, 'verifyPayment']);
+            Route::get('my/document-purchases', [MentorDocumentController::class, 'myPurchases']);
+            Route::get('my/document-purchases/{id}/download/{fileId}', [MentorDocumentController::class, 'download']);
             Route::get('my/bookings/{id}/history', [MentorBookingController::class, 'bookingHistory']);
             Route::get('my/bookings/{id}/ics', [MentorBookingController::class, 'downloadMyIcs']);
             Route::post('my/bookings/{id}/cancel', [MentorBookingController::class, 'cancelMyBooking']);
@@ -65,6 +73,14 @@ Route::group(['namespace' => 'Api\V1\Mentor'], function () {
         Route::put('services/{id}', [MentorServiceController::class, 'update']);
         Route::patch('services/{id}/enabled', [MentorServiceController::class, 'toggleEnabled']);
         Route::delete('services/{id}', [MentorServiceController::class, 'destroy']);
+
+        Route::get('documents', [MentorDocumentManagementController::class, 'index']);
+        Route::post('documents', [MentorDocumentManagementController::class, 'store']);
+        Route::put('documents/{id}', [MentorDocumentManagementController::class, 'update']);
+        Route::patch('documents/{id}/enabled', [MentorDocumentManagementController::class, 'toggleEnabled']);
+        Route::delete('documents/{id}', [MentorDocumentManagementController::class, 'destroy']);
+        Route::post('documents/{id}/files', [MentorDocumentManagementController::class, 'uploadFile']);
+        Route::delete('documents/{id}/files/{fileId}', [MentorDocumentManagementController::class, 'destroyFile']);
 
         Route::get('bookings/{id}', [MentorBookingController::class, 'showMentorBooking']);
         Route::get('bookings/{id}/history', [MentorBookingController::class, 'bookingHistory']);
