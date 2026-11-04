@@ -47,7 +47,7 @@
                     @endif
 
                     @if(Helpers::module_permission_check(MANAGEMENT_SECTION['pos_management']))
-                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/pos*')?'active':''}}">
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/pos*') || Request::is('admin/session-packs*') || Request::is('admin/earnings*') || Request::is('admin/schedules*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link nav-link-toggle"
                                    href="javascript:" title="{{translate('Bookings')}}">
                                     <i class="tio-calendar-note nav-icon"></i>
@@ -55,7 +55,7 @@
                                         class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">{{translate('Bookings')}}</span>
                                 </a>
                                 <ul class="js-navbar-vertical-aside-submenu nav nav-sub"
-                                    style="display: {{Request::is('admin/pos*')?'block':'none'}}">
+                                    style="display: {{Request::is('admin/pos*') || Request::is('admin/session-packs*') || Request::is('admin/earnings*') || Request::is('admin/schedules*')?'block':'none'}}">
                                     <li class="nav-item {{Request::is('admin/pos/orders')?'active':''}}">
                                         <a class="nav-link " href="{{route('admin.pos.orders')}}"
                                            title="{{translate('All Bookings')}}">
@@ -66,6 +66,27 @@
                                                     {{\App\Model\Mentor\MentorBooking::count() + \App\Model\DemoBooking::count()}}
                                                 </span>
                                             </span>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item {{Request::is('admin/schedules*')?'active':''}}">
+                                        <a class="nav-link " href="{{route('admin.schedules.index')}}"
+                                           title="{{translate('Schedules')}}">
+                                            <span class="tio-circle nav-indicator-icon"></span>
+                                            <span class="text-truncate">{{translate('Schedules')}}</span>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item {{Request::is('admin/session-packs*')?'active':''}}">
+                                        <a class="nav-link " href="{{route('admin.session-packs.index')}}"
+                                           title="{{translate('Session Packs')}}">
+                                            <span class="tio-circle nav-indicator-icon"></span>
+                                            <span class="text-truncate">{{translate('Session Packs')}}</span>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item {{Request::is('admin/earnings*')?'active':''}}">
+                                        <a class="nav-link " href="{{route('admin.earnings.index')}}"
+                                           title="{{translate('Earnings')}}">
+                                            <span class="tio-circle nav-indicator-icon"></span>
+                                            <span class="text-truncate">{{translate('Earnings')}}</span>
                                         </a>
                                     </li>
                                 </ul>
@@ -383,6 +404,16 @@
                                 >
                                     <i class="tio-calendar-note nav-icon"></i>
                                     <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">Demo Bookings</span>
+                                </a>
+                            </li>
+
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/student-sections*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.student-sections.index')}}"
+                                   title="Students by Section"
+                                >
+                                    <i class="tio-group-equal nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">Students by Section</span>
                                 </a>
                             </li>
 
@@ -818,6 +849,17 @@
                                     <i class="tio-settings nav-icon"></i>
                                     <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">
                                         {{translate('Business Setup')}}
+                                    </span>
+                                </a>
+                            </li>
+
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/zoho-settings*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.zoho-settings.edit')}}"
+                                   title="{{translate('Zoho Meeting')}}">
+                                    <i class="tio-video-camera nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">
+                                        {{translate('Zoho Meeting')}}
                                     </span>
                                 </a>
                             </li>

@@ -738,6 +738,68 @@ class SessionChatLogic
         return $latestId ?? 0;
     }
 
+    /**
+     * Explicit "notify the other side on WhatsApp" action (bell icon in the
+     * chat header) — capped per sender/pair/day, enforced only here so the
+     * limit never needs to be exposed to the frontend.
+     */
+    public const WHATSAPP_NOTIFY_DAILY_LIMIT = 2;
+
+    public static function notifyOtherPartyOnWhatsapp(int $mentorId, int $menteeUserId, string $senderRole): array
+    {
+        $mentor = Mentor::with('user')->find($mentorId);
+        $mentee = User::find($menteeUserId);
+        if (!$mentor || !$mentee) {
+            return ['ok' => false, 'message' => 'Conversation not found'];
+        }
+
+        $today = Carbon::today()->toDateString();
+        $row = \App\Model\SessionChatWhatsAppNotification::firstOrCreate(
+            [
+                'mentee_user_id' => $menteeUserId,
+                'mentor_id' => $mentorId,
+                'sender_role' => $senderRole,
+                'notified_date' => $today,
+            ],
+            ['send_count' => 0]
+        );
+
+        if ($row->send_count >= self::WHATSAPP_NOTIFY_DAILY_LIMIT) {
+            return ['ok' => false, 'message' => 'Could not send notification right now. Please try again later.'];
+        }
+
+        $siteUrl = rtrim((string) config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
+        $mentorDisplay = trim((string) ($mentor->display_name ?? ''));
+        $mentorName = $mentorDisplay !== '' ? (preg_split('/\s+/', $mentorDisplay)[0] ?? $mentorDisplay) : 'your mentor';
+        $menteeDisplay = trim(($mentee->f_name ?? '').' '.($mentee->l_name ?? ''));
+        $menteeName = $menteeDisplay !== '' ? (preg_split('/\s+/', $menteeDisplay)[0] ?? $menteeDisplay) : 'your student';
+
+        if ($senderRole === 'mentor') {
+            $phone = trim((string) ($mentee->phone ?? ''));
+            $recipientName = $menteeName;
+            $senderLabel = $mentorName;
+            $link = $siteUrl.'/account/messages';
+        } else {
+            $phone = trim((string) ($mentor->user?->phone ?? ''));
+            $recipientName = $mentorName;
+            $senderLabel = $menteeName;
+            $link = $siteUrl.'/mentor/dashboard/messages';
+        }
+
+        if ($phone === '') {
+            return ['ok' => false, 'message' => 'The other party has no phone number on file'];
+        }
+
+        $result = WhatsAppDemoBookingModule::sendNewMessageNotify($phone, $recipientName, $senderLabel, $link);
+        if (($result['status'] ?? '') !== 'success') {
+            return ['ok' => false, 'message' => $result['message'] ?? 'WhatsApp notification could not be sent'];
+        }
+
+        $row->increment('send_count');
+
+        return ['ok' => true, 'message' => 'Notification sent on WhatsApp'];
+    }
+
     public static function totalUnreadForViewer(int $viewerUserId, ?string $as = null): int
     {
         $as = $as === 'mentor' || $as === 'mentee' ? $as : null;

@@ -38,6 +38,7 @@ class Mentor extends Model
         'share_caption',
         'share_short_url',
         'social_links',
+        'aadhaar',
     ];
 
     public function user(): BelongsTo

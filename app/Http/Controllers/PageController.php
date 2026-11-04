@@ -26,4 +26,13 @@ class PageController extends Controller
         return view('page.about-us');
     }
 
+    /**
+     * Isolated public profile for Arvind Pandey IPS Bihar (MentorKhoj / health angle).
+     * Does not use admin layout, CMS, or API.
+     */
+    public function get_arvind_pandey_ips_bihar(): Factory|View|Application
+    {
+        return view('page.arvind-pandey-ips-bihar');
+    }
+
 }

@@ -5,11 +5,14 @@ namespace App\Http\Controllers\Admin;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorImageService;
 use App\CentralLogics\MentorLegacyProductLogic;
+use App\CentralLogics\MentorCategoryRankLogic;
 use App\CentralLogics\MentorLogic;
+use Illuminate\Pagination\LengthAwarePaginator;
 use App\Http\Controllers\Controller;
 use App\Model\Category;
 use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorService;
+use App\Model\Mentor\MentorSetting;
 use App\Model\SessionChatMessage;
 use Brian2694\Toastr\Facades\Toastr;
 use Illuminate\Contracts\Foundation\Application;
@@ -31,8 +34,12 @@ class MentorController extends Controller
     {
         $queryParam = [];
         $search = $request->get('search');
+        $categoryId = $request->filled('category') ? (int) $request->get('category') : null;
+        if ($categoryId !== null && $categoryId <= 0) {
+            $categoryId = null;
+        }
 
-        $query = $this->mentor->with('user')->withCount(['services', 'bookings'])->latest();
+        $query = $this->mentor->with(['user', 'settings'])->withCount(['services', 'bookings']);
         if ($request->has('search') && $search) {
             $key = explode(' ', $search);
             $query->where(function ($q) use ($key) {
@@ -43,12 +50,121 @@ class MentorController extends Controller
                         ->orWhere('headline', 'like', "%{$value}%");
                 }
             });
-            $queryParam = ['search' => $search];
+            $queryParam['search'] = $search;
         }
 
-        $mentors = $query->paginate(Helpers::getPagination())->appends($queryParam);
+        if ($categoryId) {
+            MentorCategoryRankLogic::applyCategoryFilter($query, $categoryId);
+            $queryParam['category'] = $categoryId;
 
-        return view('admin-views.mentor.list', compact('mentors', 'search'));
+            $all = $query->get();
+            MentorCategoryRankLogic::syncDefaultsForCategory($all, $categoryId);
+
+            $sorted = $all->sort(function ($a, $b) use ($categoryId) {
+                $ra = MentorCategoryRankLogic::rankForCategory($a, $categoryId);
+                $rb = MentorCategoryRankLogic::rankForCategory($b, $categoryId);
+                $sa = $ra ?? PHP_INT_MAX;
+                $sb = $rb ?? PHP_INT_MAX;
+                if ($sa !== $sb) {
+                    return $sa <=> $sb;
+                }
+                $bc = ((int) ($b->bookings_count ?? 0)) <=> ((int) ($a->bookings_count ?? 0));
+                if ($bc !== 0) {
+                    return $bc;
+                }
+                return ((int) $a->id) <=> ((int) $b->id);
+            })->values();
+
+            $perPage = Helpers::getPagination();
+            $page = LengthAwarePaginator::resolveCurrentPage();
+            $mentors = new LengthAwarePaginator(
+                $sorted->forPage($page, $perPage)->values(),
+                $sorted->count(),
+                $perPage,
+                $page,
+                ['path' => $request->url(), 'query' => $queryParam]
+            );
+        } else {
+            $mentors = $query->latest()->paginate(Helpers::getPagination())->appends($queryParam);
+        }
+
+        $featuredCategories = MentorCategoryRankLogic::featuredCategories();
+        $activeCategoryId = $categoryId;
+
+        return view('admin-views.mentor.list', compact(
+            'mentors',
+            'search',
+            'featuredCategories',
+            'activeCategoryId',
+        ));
+    }
+
+    public function updateCategoryRank(Request $request, $id): RedirectResponse
+    {
+        $mentor = $this->mentor->findOrFail($id);
+        $categoryId = (int) $request->input('category_id');
+        $rankRaw = $request->input('rank');
+        $rank = ($rankRaw === null || $rankRaw === '') ? null : (int) $rankRaw;
+
+        if ($categoryId <= 0) {
+            Toastr::error(translate('invalid category'));
+            return back();
+        }
+
+        if (!MentorCategoryRankLogic::updateFinalRank($mentor, $categoryId, $rank)) {
+            Toastr::error(translate('mentor is not in this category'));
+            return back();
+        }
+
+        Toastr::success(translate('mentor rank updated'));
+        return redirect()->route('admin.mentor.list', array_filter([
+            'category' => $categoryId,
+            'search' => $request->input('search'),
+            'page' => $request->input('page'),
+        ]));
+    }
+
+    /**
+     * Toggle whether this mentor's default/placeholder reviews and rating
+     * (shown when they have no real reviews yet) are hidden on their public
+     * profile. Does not touch any real review data.
+     */
+    public function toggleDefaultReviews(Request $request): RedirectResponse
+    {
+        $mentor = $this->mentor->find($request->id);
+        if (!$mentor) {
+            Toastr::error(translate('mentor not found'));
+            return back();
+        }
+
+        $settings = MentorSetting::firstOrCreate(['mentor_id' => $mentor->id]);
+        $settings->hide_default_reviews = (bool) $request->hide;
+        $settings->save();
+
+        Toastr::success($settings->hide_default_reviews
+            ? translate('Default reviews hidden for this mentor')
+            : translate('Default reviews re-enabled for this mentor'));
+        return back();
+    }
+
+    public function refreshCategoryDefaults(Request $request): RedirectResponse
+    {
+        $categoryId = (int) $request->input('category');
+        if ($categoryId <= 0) {
+            Toastr::error(translate('invalid category'));
+            return back();
+        }
+
+        $query = $this->mentor->withCount(['bookings']);
+        MentorCategoryRankLogic::applyCategoryFilter($query, $categoryId);
+        $all = $query->get();
+        MentorCategoryRankLogic::syncDefaultsForCategory($all, $categoryId);
+
+        Toastr::success(translate('default ranks refreshed from bookings'));
+        return redirect()->route('admin.mentor.list', array_filter([
+            'category' => $categoryId,
+            'search' => $request->input('search'),
+        ]));
     }
 
     public function edit($id): View|Factory|Application
@@ -82,6 +198,14 @@ class MentorController extends Controller
     {
         $mentor = $this->mentor->with('services')->findOrFail($id);
 
+        if ($request->has('aadhaar')) {
+            $request->merge([
+                'aadhaar' => $request->filled('aadhaar')
+                    ? preg_replace('/\D/', '', (string) $request->aadhaar)
+                    : null,
+            ]);
+        }
+
         $validator = Validator::make($request->all(), [
             'display_name' => 'required|string|max:255',
             'username' => 'required|string|max:100|regex:/^[a-z0-9-]+$/|unique:mentors,username,' . $mentor->id,
@@ -101,11 +225,13 @@ class MentorController extends Controller
             'social_links.facebook' => 'nullable|url|max:500',
             'social_links.linkedin' => 'nullable|url|max:500',
             'social_links.youtube' => 'nullable|url|max:500',
+            'social_links.threads' => 'nullable|url|max:500',
             'social_links.whatsapp' => 'nullable|url|max:500',
             'social_links.linktree' => 'nullable|url|max:500',
             'social_links.website' => 'nullable|url|max:500',
             'delete_service_ids' => 'nullable|array',
             'delete_service_ids.*' => 'integer|exists:mentor_services,id',
+            'aadhaar' => ['nullable', 'string', 'regex:/^\d{12}$/'],
         ]);
 
         if ($validator->fails()) {
@@ -124,6 +250,9 @@ class MentorController extends Controller
         $mentor->profile_discount = (float) ($request->profile_discount ?? 0);
         $mentor->discount_type = $request->discount_type ?: 'percent';
         $mentor->share_caption = $request->share_caption;
+        $mentor->aadhaar = $request->filled('aadhaar')
+            ? preg_replace('/\D/', '', (string) $request->aadhaar)
+            : null;
 
         $category = [];
         if ($request->category_id) {
@@ -132,6 +261,7 @@ class MentorController extends Controller
         if ($request->sub_category_id) {
             $category[] = ['id' => (string) $request->sub_category_id, 'position' => 2];
         }
+        $category = MentorCategoryRankLogic::mergeRankFields($category, $mentor->category_ids_array);
         $mentor->category_ids = json_encode($category);
 
         $mentor->social_links = json_encode(

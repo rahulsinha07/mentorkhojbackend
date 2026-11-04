@@ -219,110 +219,121 @@ class Helpers
         return $amount;
     }
 
+    /**
+     * Device push via FCM HTTP v1 (Kreait). Data values are strings so Android and iOS
+     * can route the tap. The legacy fcm/send endpoint returns 404.
+     */
     public static function send_push_notif_to_device($fcm_token, $data)
     {
-        /*https://fcm.googleapis.com/v1/projects/myproject-b5ae1/messages:send*/
-        $key = BusinessSetting::where(['key' => 'push_notification_key'])->first()->value;
-        /*$project_id = BusinessSetting::where(['key' => 'fcm_project_id'])->first()->value;*/
+        $fcm_token = is_string($fcm_token) ? trim($fcm_token) : '';
+        if ($fcm_token === '' || $fcm_token === '@') {
+            return json_encode(['success' => 0, 'failure' => 1, 'error' => 'invalid_token']);
+        }
 
-        $url = "https://fcm.googleapis.com/fcm/send";
-        $header = array("authorization: key=" . $key . "",
-            "content-type: application/json"
-        );
-
-        $postdata = '{
-            "to" : "' . $fcm_token . '",
-            "mutable-content": "true",
-            "data" : {
-                "title":"' . $data['title'] . '",
-                "body" : "' . $data['description'] . '",
-                "image" : "' . $data['image'] . '",
-                "order_id":"' . $data['order_id'] . '",
-                "type":"' . $data['type'] . '",
-                "is_read": 0
-              },
-             "notification" : {
-                "title" :"' . $data['title'] . '",
-                "body" : "' . $data['description'] . '",
-                "image" : "' . $data['image'] . '",
-                "order_id":"' . $data['order_id'] . '",
-                "title_loc_key":"' . $data['order_id'] . '",
-                "type":"' . $data['type'] . '",
-                "is_read": 0,
-                "icon" : "new",
-                "sound" : "default"
-              }
-        }';
-
-        $ch = curl_init();
-        $timeout = 120;
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $postdata);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
-
-        // Get URL content
-        $result = curl_exec($ch);
-        // close handle to release resources
-        curl_close($ch);
-
-        return $result;
+        return self::sendFcmMessage($data, 'token', $fcm_token);
     }
 
     public static function send_push_notif_to_topic($data)
     {
-        /*https://fcm.googleapis.com/v1/projects/myproject-b5ae1/messages:send*/
-        $key = BusinessSetting::where(['key' => 'push_notification_key'])->first()->value;
-        /*$topic = BusinessSetting::where(['key' => 'fcm_topic'])->first()->value;*/
-        /*$project_id = BusinessSetting::where(['key' => 'fcm_project_id'])->first()->value;*/
+        $topic = 'Mentorkhoj';
+        try {
+            $row = BusinessSetting::where('key', 'fcm_topic')->first();
+            if ($row && is_string($row->value) && trim($row->value) !== '') {
+                $topic = trim($row->value);
+            }
+        } catch (\Throwable $e) {
+            $topic = 'Mentorkhoj';
+        }
 
-        $url = "https://fcm.googleapis.com/fcm/send";
-        $header = array("authorization: key=" . $key . "",
-            "content-type: application/json"
-        );
+        if (!empty($data['image']) && is_string($data['image']) && strpos($data['image'], 'http') !== 0) {
+            $data['image'] = asset('storage/app/public/notification').'/'.$data['image'];
+        }
 
-        $image = asset('storage/app/public/notification') . '/' . $data['image'];
-        $postdata = '{
-            "to" : "/topics/mentorkhoj",
-            "mutable-content": "true",
-            "data" : {
-                "title" :"' . $data['title'] . '",
-                "body" : "' . $data['description'] . '",
-                "image" : "' . $image . '",
-                "order_id":"' . $data['order_id'] . '",
-                "type":"' . $data['type'] . '",
-                "is_read": 0
-              },
-              "notification" : {
-                "title" :"' . $data['title'] . '",
-                "body" : "' . $data['description'] . '",
-                "image" : "' . $image . '",
-                "order_id":"' . $data['order_id'] . '",
-                "title_loc_key":"' . $data['order_id'] . '",
-                "type":"' . $data['type'] . '",
-                "is_read": 0,
-                "icon" : "new",
-                "sound" : "default"
-              }
-        }';
+        return self::sendFcmMessage($data, 'topic', $topic);
+    }
 
-        $ch = curl_init();
-        $timeout = 120;
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $postdata);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+    private static function sendFcmMessage($data, string $targetType, string $target): string
+    {
+        try {
+            $messaging = self::fcmMessaging();
+            if (!$messaging) {
+                return json_encode(['success' => 0, 'failure' => 1, 'error' => 'missing_credentials']);
+            }
 
-        // Get URL content
-        $result = curl_exec($ch);
-        // close handle to release resources
-        curl_close($ch);
+            $title = (string) ($data['title'] ?? 'MentorKhoj');
+            $body = (string) ($data['description'] ?? ($data['body'] ?? ''));
+            $stringData = [];
+            if (is_array($data)) {
+                foreach ($data as $key => $value) {
+                    if (is_array($value) || is_object($value) || $value === null) {
+                        continue;
+                    }
+                    $stringData[(string) $key] = (string) $value;
+                }
+            }
+            $stringData['title'] = $title;
+            $stringData['body'] = $body;
+            if (!isset($stringData['description'])) {
+                $stringData['description'] = $body;
+            }
+            if (!isset($stringData['type'])) {
+                $stringData['type'] = 'general';
+            }
+            if (!isset($stringData['order_id'])) {
+                $stringData['order_id'] = '';
+            }
+            $stringData['is_read'] = '0';
 
-        return $result;
+            $message = \Kreait\Firebase\Messaging\CloudMessage::withTarget($targetType, $target)
+                ->withNotification(\Kreait\Firebase\Messaging\Notification::create($title, $body))
+                ->withData($stringData)
+                ->withAndroidConfig(\Kreait\Firebase\Messaging\AndroidConfig::fromArray([
+                    'priority' => 'high',
+                    'notification' => [
+                        'channel_id' => 'high_importance_channel',
+                        'sound' => 'default',
+                    ],
+                ]))
+                ->withApnsConfig(\Kreait\Firebase\Messaging\ApnsConfig::fromArray([
+                    'headers' => [
+                        'apns-priority' => '10',
+                    ],
+                    'payload' => [
+                        'aps' => [
+                            'sound' => 'default',
+                            'badge' => 1,
+                        ],
+                    ],
+                ]));
+
+            $messaging->send($message);
+
+            return json_encode(['success' => 1, 'failure' => 0]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('FCM send failed: '.$e->getMessage());
+
+            return json_encode(['success' => 0, 'failure' => 1, 'error' => 'fcm_failed']);
+        }
+    }
+
+    private static function fcmMessaging(): ?\Kreait\Firebase\Contract\Messaging
+    {
+        $paths = [];
+        $configured = config('firebase.projects.app.credentials.file');
+        if (is_string($configured) && $configured !== '') {
+            $paths[] = $configured;
+        }
+        $paths[] = storage_path('app/firebase-credentials.json');
+
+        foreach ($paths as $path) {
+            if (is_string($path) && is_file($path)) {
+                return (new \Kreait\Firebase\Factory())->withServiceAccount($path)->createMessaging();
+            }
+        }
+
+        // No service-account file yet. Skip Firebase entirely so website requests
+        // keep their current email and JSON behavior.
+        return null;
     }
 
     public static function rating_count($product_id, $rating)

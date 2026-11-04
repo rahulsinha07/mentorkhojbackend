@@ -20,6 +20,20 @@
     if ($selectedMentorId && $serviceNameValue === '') {
         $serviceNameValue = optional($mentors->firstWhere('id', $selectedMentorId))->display_name ?? '';
     }
+    $mentorSnapshot = $mentorSnapshot ?? [];
+    $mentorAadhaar = '';
+    if ($selectedMentorId) {
+        foreach ($mentorSnapshot as $snap) {
+            if ((int) ($snap['id'] ?? 0) === (int) $selectedMentorId) {
+                $mentorAadhaar = preg_replace('/\D/', '', (string) ($snap['aadhaar'] ?? ''));
+                break;
+            }
+        }
+        if ($mentorAadhaar === '') {
+            $mentorAadhaar = preg_replace('/\D/', '', (string) (optional($mentors->firstWhere('id', $selectedMentorId))->aadhaar ?? ''));
+        }
+    }
+    $showAadhaar = $selectedMentorId && !$customItem;
 @endphp
 <div class="invoice-item-card item-row border rounded p-3 mb-3 bg-white" data-index="{{ $index }}">
     <input type="hidden" name="items[{{ $index }}][sort_order]" class="item-sort" value="{{ $item['sort_order'] ?? $index }}">
@@ -52,6 +66,21 @@
         <div class="col-md-6">
             <label class="small text-muted mb-1 d-block">{{ translate('Description') }}</label>
             <input type="text" name="items[{{ $index }}][description]" class="form-control item-description" value="{{ $item['description'] ?? '' }}" placeholder="{{ translate('Session details') }}">
+        </div>
+    </div>
+
+    {{-- Row 1b: Mentor Aadhaar (masked display) --}}
+    <div class="row g-2 mb-2 item-aadhaar-wrap {{ $showAadhaar ? '' : 'd-none' }}">
+        <div class="col-md-6">
+            <label class="small text-muted mb-1 d-block">{{ translate('Aadhaar Number') }}</label>
+            <input type="hidden" class="item-mentor-aadhaar-value" value="{{ $mentorAadhaar }}">
+            <input type="text"
+                   class="form-control item-mentor-aadhaar-display item-aadhaar-display"
+                   maxlength="14"
+                   placeholder="XXXX XXXX 1234"
+                   autocomplete="off"
+                   inputmode="numeric">
+            <small class="text-muted">{{ translate('Only last 4 digits shown when not editing') }}</small>
         </div>
     </div>
 

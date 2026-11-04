@@ -152,6 +152,29 @@ Route::group(['prefix' => 'pages', 'as' => 'pages.'], function () {
     Route::get('about-us', [PageController::class, 'get_about_us'])->name('about-us');
 });
 
+Route::get('arvind-pandey-ips-bihar', [PageController::class, 'get_arvind_pandey_ips_bihar'])->name('pages.arvind-pandey-ips-bihar');
+Route::get('arvind-pandey-ips', function () {
+    return redirect()->route('pages.arvind-pandey-ips-bihar', [], 301);
+});
+Route::get('arvind-pandey-ips-', function () {
+    return redirect()->route('pages.arvind-pandey-ips-bihar', [], 301);
+});
+
+Route::get('robots.txt', function () {
+    $path = public_path('robots.txt');
+    if (!is_file($path)) {
+        abort(404);
+    }
+    return response()->file($path, ['Content-Type' => 'text/plain; charset=UTF-8']);
+});
+Route::get('sitemap-arvind.xml', function () {
+    $path = public_path('sitemap-arvind.xml');
+    if (!is_file($path)) {
+        abort(404);
+    }
+    return response()->file($path, ['Content-Type' => 'application/xml; charset=UTF-8']);
+});
+
 Route::get('/test-editor', function () {
     //
 });

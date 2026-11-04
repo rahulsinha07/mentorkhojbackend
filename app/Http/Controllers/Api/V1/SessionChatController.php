@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\SessionChatLogic;
 use App\CentralLogics\SessionChatMailLogic;
+use App\CentralLogics\SessionChatPushLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Mentor\Mentor;
 use App\Model\SessionChatMessage;
@@ -168,11 +169,47 @@ class SessionChatController extends Controller
 
         SessionChatLogic::markThreadRead((int) $user->id, $mentorId, $menteeUserId);
         SessionChatMailLogic::notify($row);
+        SessionChatPushLogic::notify($row);
 
         return response()->json(array_merge([
             'ok' => true,
             'message' => SessionChatLogic::formatMessage($row),
         ], SessionChatLogic::quotaPayload($menteeUserId, $mentorId)), 201);
+    }
+
+    public function notifyWhatsapp(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $mentorId = (int) $request->input('mentor_id', 0);
+        $mentorProfile = SessionChatLogic::mentorProfileForUser((int) $user->id);
+        $asMentor = $mentorProfile
+            && (int) $mentorProfile->id === $mentorId
+            && $request->filled('mentee_user_id')
+            && (int) $request->input('mentee_user_id') !== (int) $user->id;
+
+        if ($asMentor) {
+            $menteeUserId = (int) $request->input('mentee_user_id');
+            if (!SessionChatLogic::mentorCanAccess($mentorId, $menteeUserId)) {
+                return response()->json(['errors' => [['message' => 'Chat not available']]], 403);
+            }
+            $senderRole = 'mentor';
+        } else {
+            if ($mentorId < 1) {
+                return response()->json(['errors' => [['message' => 'mentor_id is required']]], 422);
+            }
+            $menteeUserId = (int) $user->id;
+            if (!SessionChatLogic::studentCanAccess($menteeUserId, $mentorId)) {
+                return response()->json(['errors' => [['message' => 'Chat not available']]], 403);
+            }
+            $senderRole = 'mentee';
+        }
+
+        $result = SessionChatLogic::notifyOtherPartyOnWhatsapp($mentorId, $menteeUserId, $senderRole);
+        if (!($result['ok'] ?? false)) {
+            return response()->json(['errors' => [['message' => $result['message'] ?? 'Could not send notification']]], 422);
+        }
+
+        return response()->json(['ok' => true, 'message' => $result['message']]);
     }
 
     public function downloadAttachment(Request $request, int $id): StreamedResponse|JsonResponse

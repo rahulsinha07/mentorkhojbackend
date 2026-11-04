@@ -47,6 +47,44 @@ class MentorEarningsLogic
             'paid_out' => round($paidOut, 2),
             'available_balance' => round(max(0, $net - $paidOut - $pendingPayout), 2),
             'pending_payout' => round($pendingPayout, 2),
+            'platform_fee_percent' => MentorLogic::platformFeePercent(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public static function formatTransaction(MentorEarning $earning): array
+    {
+        $earning->loadMissing(['booking.mentee', 'booking.service']);
+
+        $booking = $earning->booking;
+        $menteeName = $booking?->mentee
+            ? trim(($booking->mentee->f_name ?? '').' '.($booking->mentee->l_name ?? ''))
+            : null;
+        $bookingSource = SessionCreditLogic::normalizeBookingSourceForApi($booking?->booking_source ?? 'paid');
+        $sessionDate = null;
+        if ($booking?->preferred_date) {
+            $date = $booking->preferred_date instanceof \Carbon\Carbon
+                ? $booking->preferred_date->format('Y-m-d')
+                : (string) $booking->preferred_date;
+            $time = $booking->preferred_time ? substr((string) $booking->preferred_time, 0, 5) : null;
+            $sessionDate = $time ? "{$date} {$time}" : $date;
+        }
+
+        $label = $menteeName ? "Session completed — {$menteeName}" : 'Session completed';
+
+        return [
+            'id' => $earning->id,
+            'type' => $earning->type,
+            'gross' => round((float) $earning->gross, 2),
+            'fee' => round((float) $earning->fee, 2),
+            'net' => round((float) $earning->net, 2),
+            'status' => $earning->status,
+            'booking_source' => $bookingSource,
+            'mentee_name' => $menteeName,
+            'session_date' => $sessionDate,
+            'description' => $label,
+            'platform_fee_percent' => MentorLogic::platformFeePercent(),
+            'created_at' => $earning->created_at?->toIso8601String(),
         ];
     }
 }

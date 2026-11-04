@@ -24,6 +24,15 @@
                 <tr>
                     <td style="padding:8px 0;border-top:1px solid #e2e8f0;font-size:14px;color:#334155;"><strong style="color:#0f172a;">Mode</strong><br>{{ $session_mode }}</td>
                 </tr>
+                @if(!empty($meeting_url ?? null))
+                <tr>
+                    <td style="padding:8px 0;border-top:1px solid #e2e8f0;font-size:14px;color:#334155;">
+                        <strong style="color:#0f172a;">Join link</strong><br>
+                        <a href="{{ $meeting_url }}" style="color:#0d9488;word-break:break-all;">{{ $meeting_url }}</a><br>
+                        <span style="font-size:12px;color:#64748b;">The Join button becomes active 15 minutes before the session starts.</span>
+                    </td>
+                </tr>
+                @endif
                 <tr>
                     <td style="padding:8px 0;border-top:1px solid #e2e8f0;font-size:14px;color:#334155;"><strong style="color:#0f172a;">{{ $amount_label ?? 'Amount paid' }}</strong><br>{{ $amount_paid }}</td>
                 </tr>

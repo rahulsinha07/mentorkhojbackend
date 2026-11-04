@@ -22,6 +22,120 @@
         if (el && value != null) el.value = value;
     }
 
+    function normalizeAadhaarDigits(value) {
+        return String(value || '').replace(/\D/g, '').slice(0, 12);
+    }
+
+    function maskAadhaarDisplay(digits) {
+        digits = normalizeAadhaarDigits(digits);
+        if (!digits) return '';
+        if (digits.length <= 4) return digits;
+
+        return 'XXXX XXXX ' + digits.slice(-4);
+    }
+
+    function flushMaskedAadhaarDisplay(displayInput, valueInput) {
+        if (!displayInput || !valueInput) return;
+        var digits = normalizeAadhaarDigits(displayInput.value);
+        valueInput.value = digits;
+        displayInput.value = maskAadhaarDisplay(digits);
+        delete displayInput.dataset.editing;
+    }
+
+    function initMaskedAadhaarField(displayInput, valueInput, onChange) {
+        if (!displayInput || !valueInput || displayInput.dataset.aadhaarInit) return;
+        displayInput.dataset.aadhaarInit = '1';
+
+        var digits = normalizeAadhaarDigits(valueInput.value);
+        valueInput.value = digits;
+        displayInput.value = maskAadhaarDisplay(digits);
+
+        displayInput.addEventListener('focus', function () {
+            displayInput.dataset.editing = '1';
+            displayInput.value = valueInput.value;
+            displayInput.select();
+        });
+
+        displayInput.addEventListener('blur', function () {
+            flushMaskedAadhaarDisplay(displayInput, valueInput);
+            if (onChange) onChange(valueInput.value);
+        });
+
+        displayInput.addEventListener('input', function () {
+            if (displayInput.dataset.editing !== '1') return;
+            var nextDigits = normalizeAadhaarDigits(displayInput.value);
+            valueInput.value = nextDigits;
+            if (onChange) onChange(nextDigits);
+        });
+    }
+
+    function getAadhaarForMentorFromSnapshot(mentorId) {
+        var entry = readExistingSnapshot().find(function (m) {
+            return String(m.id) === String(mentorId);
+        });
+
+        return entry && entry.aadhaar ? normalizeAadhaarDigits(entry.aadhaar) : '';
+    }
+
+    function updateItemAadhaarVisibility(row) {
+        var wrap = row.querySelector('.item-aadhaar-wrap');
+        var select = row.querySelector('.item-mentor-select');
+        if (!wrap || !select) return;
+        wrap.classList.toggle('d-none', !select.value || select.value === 'custom');
+    }
+
+    function setItemRowAadhaar(row, digits, skipSync) {
+        var valueInput = row.querySelector('.item-mentor-aadhaar-value');
+        var displayInput = row.querySelector('.item-mentor-aadhaar-display');
+        digits = normalizeAadhaarDigits(digits);
+        if (valueInput) valueInput.value = digits;
+        if (displayInput && displayInput.dataset.editing !== '1') {
+            displayInput.value = maskAadhaarDisplay(digits);
+        }
+        updateItemAadhaarVisibility(row);
+        if (!skipSync) syncAadhaarAcrossRows(row);
+    }
+
+    function syncAadhaarAcrossRows(changedRow) {
+        var select = changedRow.querySelector('.item-mentor-select');
+        if (!select || !select.value || select.value === 'custom') {
+            syncMentorSnapshot();
+            return;
+        }
+
+        var mentorId = select.value;
+        var valueInput = changedRow.querySelector('.item-mentor-aadhaar-value');
+        var digits = valueInput ? normalizeAadhaarDigits(valueInput.value) : '';
+
+        itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+            if (row === changedRow) return;
+            var rowSelect = row.querySelector('.item-mentor-select');
+            if (rowSelect && rowSelect.value === mentorId) {
+                setItemRowAadhaar(row, digits, true);
+            }
+        });
+        syncMentorSnapshot();
+    }
+
+    function initItemRowAadhaar(row) {
+        var displayInput = row.querySelector('.item-mentor-aadhaar-display');
+        var valueInput = row.querySelector('.item-mentor-aadhaar-value');
+        initMaskedAadhaarField(displayInput, valueInput, function () {
+            syncAadhaarAcrossRows(row);
+        });
+        updateItemAadhaarVisibility(row);
+    }
+
+    function flushAllMaskedAadhaarFields() {
+        document.querySelectorAll('.item-aadhaar-display').forEach(function (displayInput) {
+            var row = displayInput.closest('.item-row');
+            var valueInput = row
+                ? row.querySelector('.item-mentor-aadhaar-value')
+                : document.getElementById('customer_aadhaar');
+            if (valueInput) flushMaskedAadhaarDisplay(displayInput, valueInput);
+        });
+    }
+
     function money(n) {
         return '₹' + (Number(n) || 0).toFixed(2);
     }
@@ -135,6 +249,58 @@
         return mentors.find(function (m) { return String(m.id) === String(mentorId); }) || null;
     }
 
+    function readExistingSnapshot() {
+        var snapshotEl = document.getElementById('mentor_snapshot');
+        if (!snapshotEl || !snapshotEl.value) return [];
+        try {
+            var parsed = JSON.parse(snapshotEl.value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function renderMentorDetailsCard(snapshot) {
+        // Mentor Aadhaar is edited inline on each invoice item row.
+        return snapshot;
+    }
+
+    function syncMentorSnapshot() {
+        var snapshotEl = document.getElementById('mentor_snapshot');
+        var siteUrl = cfg.mentorkhojSiteUrl || 'https://www.mentorkhoj.com';
+        var existing = readExistingSnapshot();
+        var byId = {};
+        existing.forEach(function (m) {
+            if (m && m.id != null) byId[String(m.id)] = m;
+        });
+
+        var seen = {};
+        var snapshot = [];
+        itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+            var select = row.querySelector('.item-mentor-select');
+            if (!select || !select.value || select.value === 'custom') return;
+            var id = String(select.value);
+            if (seen[id]) return;
+            seen[id] = true;
+
+            var meta = getMentorMeta(id);
+            var prev = byId[id] || {};
+            var username = meta ? meta.username : (prev.username || '');
+            var aadhaarEl = row.querySelector('.item-mentor-aadhaar-value');
+            var rowAadhaar = aadhaarEl ? normalizeAadhaarDigits(aadhaarEl.value) : '';
+            snapshot.push({
+                id: parseInt(id, 10),
+                name: meta ? meta.name : (prev.name || ''),
+                username: username,
+                profile_url: username ? siteUrl + '/mentor/' + username : (prev.profile_url || null),
+                aadhaar: rowAadhaar || prev.aadhaar || (meta && meta.aadhaar ? normalizeAadhaarDigits(meta.aadhaar) : null) || null,
+            });
+        });
+
+        if (snapshotEl) snapshotEl.value = JSON.stringify(snapshot);
+        return snapshot;
+    }
+
     function applyMentorSelection(row, keepDescription, forceRate) {
         var select = row.querySelector('.item-mentor-select');
         var serviceInput = row.querySelector('.item-service');
@@ -152,6 +318,8 @@
             if (customInput) customInput.classList.remove('d-none');
             serviceInput.value = customInput ? customInput.value.trim() : '';
             if (skuInput) skuInput.value = '';
+            setItemRowAadhaar(row, '', true);
+            syncMentorSnapshot();
             return;
         }
 
@@ -163,6 +331,8 @@
         if (val === '') {
             serviceInput.value = '';
             if (skuInput) skuInput.value = '';
+            setItemRowAadhaar(row, '', true);
+            syncMentorSnapshot();
             return;
         }
 
@@ -186,6 +356,13 @@
             if (username) parts.push('Profile: ' + siteUrl + '/mentor/' + username);
             if (parts.length) descInput.value = parts.join(' | ');
         }
+
+        var snapAadhaar = getAadhaarForMentorFromSnapshot(val);
+        var metaAadhaar = meta && meta.aadhaar ? normalizeAadhaarDigits(meta.aadhaar) : '';
+        var currentAadhaar = row.querySelector('.item-mentor-aadhaar-value');
+        var existingDigits = currentAadhaar ? normalizeAadhaarDigits(currentAadhaar.value) : '';
+        setItemRowAadhaar(row, existingDigits || snapAadhaar || metaAadhaar, true);
+        syncMentorSnapshot();
     }
 
     function syncCustomServiceName(row) {
@@ -489,6 +666,14 @@
                 input.value = '0';
                 return;
             }
+            if (input.classList.contains('item-mentor-aadhaar-value')) {
+                input.value = '';
+                return;
+            }
+            if (input.classList.contains('item-mentor-aadhaar-display')) {
+                input.value = '';
+                return;
+            }
             input.value = '';
         });
         var customInput = row.querySelector('.item-service-custom');
@@ -496,12 +681,14 @@
             customInput.value = '';
             customInput.classList.add('d-none');
         }
+        setItemRowAadhaar(row, '', true);
         var discType = row.querySelector('.item-discount-type');
         if (discType) discType.value = 'fixed';
         row.querySelector('.item-line-total').textContent = money(0);
     }
 
     function bindRowActions(row) {
+        initItemRowAadhaar(row);
         var removeBtn = row.querySelector('.btn-remove-item');
         var dupBtn = row.querySelector('.btn-dup-item');
         if (removeBtn) {
@@ -512,6 +699,7 @@
                     row.remove();
                     reindexRows();
                 }
+                syncMentorSnapshot();
                 recalcLocal();
             };
         }
@@ -519,6 +707,7 @@
             dupBtn.onclick = function () {
                 var data = readRowData(row);
                 addRowFromData(data, itemsBody.querySelectorAll('.item-row').length);
+                syncMentorSnapshot();
                 recalcLocal();
             };
         }
@@ -676,6 +865,12 @@
         Object.keys(map).forEach(function (k) {
             setInputValue(map[k], data[k]);
         });
+        var customerAadhaarHidden = document.getElementById('customer_aadhaar');
+        var customerAadhaarDisplay = document.getElementById('customer_aadhaar_display');
+        if (customerAadhaarHidden && customerAadhaarDisplay) {
+            customerAadhaarHidden.value = normalizeAadhaarDigits(customerAadhaarHidden.value);
+            customerAadhaarDisplay.value = maskAadhaarDisplay(customerAadhaarHidden.value);
+        }
         if (data.payment_status) document.getElementById('payment_status').value = data.payment_status;
         if (data.amount_paid != null) document.getElementById('amount_paid').value = data.amount_paid;
         if (data.tax_mode) {
@@ -687,6 +882,8 @@
         if (snapshotEl && snapshot.length) {
             snapshotEl.value = JSON.stringify(snapshot);
         }
+        renderMentorDetailsCard(snapshot);
+        syncMentorSnapshot();
 
         if (data.demo_booking) {
             renderDemoDetailsCard(data.demo_booking, snapshot);
@@ -700,6 +897,19 @@
             data.items.forEach(function (item, idx) {
                 addRowFromData(item, idx);
             });
+            var snapshot = data.mentor_snapshot || data.mentors || [];
+            if (snapshot.length) {
+                var snapshotEl = document.getElementById('mentor_snapshot');
+                if (snapshotEl) snapshotEl.value = JSON.stringify(snapshot);
+                itemsBody.querySelectorAll('.item-row').forEach(function (row) {
+                    var select = row.querySelector('.item-mentor-select');
+                    if (!select || !select.value || select.value === 'custom') return;
+                    var entry = snapshot.find(function (m) { return String(m.id) === String(select.value); });
+                    if (entry && entry.aadhaar) {
+                        setItemRowAadhaar(row, entry.aadhaar, true);
+                    }
+                });
+            }
         }
         recalcLocal();
     }
@@ -768,6 +978,34 @@
             type: 'text', name: 'items[' + idx + '][description]'
         }, 'item-description', item.description || ''), 'col-md-6'));
         row.appendChild(row1);
+
+        var aadhaarRow = document.createElement('div');
+        aadhaarRow.className = 'row g-2 mb-2 item-aadhaar-wrap d-none';
+        var aadhaarCol = document.createElement('div');
+        aadhaarCol.className = 'col-md-6';
+        var aadhaarLbl = document.createElement('label');
+        aadhaarLbl.className = 'small text-muted mb-1 d-block';
+        aadhaarLbl.textContent = 'Aadhaar Number';
+        aadhaarCol.appendChild(aadhaarLbl);
+        var aadhaarHidden = document.createElement('input');
+        aadhaarHidden.type = 'hidden';
+        aadhaarHidden.className = 'item-mentor-aadhaar-value';
+        aadhaarHidden.value = '';
+        aadhaarCol.appendChild(aadhaarHidden);
+        var aadhaarDisplay = document.createElement('input');
+        aadhaarDisplay.type = 'text';
+        aadhaarDisplay.className = 'form-control item-mentor-aadhaar-display item-aadhaar-display';
+        aadhaarDisplay.maxLength = 14;
+        aadhaarDisplay.placeholder = 'XXXX XXXX 1234';
+        aadhaarDisplay.autocomplete = 'off';
+        aadhaarDisplay.setAttribute('inputmode', 'numeric');
+        aadhaarCol.appendChild(aadhaarDisplay);
+        var aadhaarHint = document.createElement('small');
+        aadhaarHint.className = 'text-muted';
+        aadhaarHint.textContent = 'Only last 4 digits shown when not editing';
+        aadhaarCol.appendChild(aadhaarHint);
+        aadhaarRow.appendChild(aadhaarCol);
+        row.appendChild(aadhaarRow);
 
         var row2 = document.createElement('div');
         row2.className = 'row g-2 mb-2';
@@ -840,6 +1078,8 @@
     }
 
     form.addEventListener('submit', function (e) {
+        flushAllMaskedAadhaarFields();
+        syncMentorSnapshot();
         var invalid = false;
         var messages = [];
         itemsBody.querySelectorAll('.item-row').forEach(function (row) {
@@ -922,6 +1162,11 @@
     }
 
     recalcLocal();
+    initMaskedAadhaarField(
+        document.getElementById('customer_aadhaar_display'),
+        document.getElementById('customer_aadhaar')
+    );
+    syncMentorSnapshot();
 
     if (cfg.autoDemoRef) {
         document.getElementById('btn-prefill-demo').click();

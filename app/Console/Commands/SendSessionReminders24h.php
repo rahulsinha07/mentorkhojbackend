@@ -20,12 +20,13 @@ class SendSessionReminders24h extends Command
 
         $bookings = MentorBooking::query()
             ->with(['mentor.user', 'service', 'mentee'])
-            ->whereIn('status', ['requested', 'confirmed'])
-            ->whereNotNull('preferred_date')
-            ->whereNotNull('preferred_time')
-            ->whereNull('session_reminder_24h_sent_at')
-            ->whereDate('preferred_date', '>=', now()->subDay()->toDateString())
-            ->whereDate('preferred_date', '<=', now()->addDay()->toDateString())
+            ->whereIn('status', ['requested', 'confirmed', 'reschedule_requested'])
+            ->where(function ($q) {
+                $q->whereNotNull('scheduled_at')
+                    ->orWhere(function ($q2) {
+                        $q2->whereNotNull('preferred_date')->whereNotNull('preferred_time');
+                    });
+            })
             ->orderBy('id')
             ->get();
 

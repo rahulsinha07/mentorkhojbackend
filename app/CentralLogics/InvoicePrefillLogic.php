@@ -221,6 +221,7 @@ class InvoicePrefillLogic
                 'name' => $mentorName,
                 'username' => $mentor->username,
                 'profile_url' => $profileUrl,
+                'aadhaar' => $mentor->aadhaar,
             ];
         }
 

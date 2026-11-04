@@ -60,6 +60,13 @@
                                     <input type="text" name="headline" class="form-control" maxlength="500"
                                            value="{{ old('headline', $mentor->headline) }}">
                                 </div>
+                                <div class="col-md-6">
+                                    <label class="input-label">{{ translate('Aadhaar Number') }}</label>
+                                    <input type="text" name="aadhaar" class="form-control" maxlength="12" pattern="\d{12}"
+                                           placeholder="12-digit Aadhaar"
+                                           value="{{ old('aadhaar', $mentor->aadhaar) }}">
+                                    <small class="text-muted">{{ translate('Stored for invoicing; masked on downloaded PDFs') }}</small>
+                                </div>
                                 <div class="col-12">
                                     <label class="input-label">{{ translate('Bio / description') }}</label>
                                     <textarea name="bio_html" rows="8" class="form-control">{{ old('bio_html', $mentor->bio_html) }}</textarea>
@@ -163,7 +170,7 @@
                         <div class="card-header"><h5 class="card-title mb-0">{{ translate('Social links') }}</h5></div>
                         <div class="card-body">
                             <div class="row g-3">
-                                @foreach(['linkedin', 'instagram', 'facebook', 'youtube', 'whatsapp', 'linktree', 'website'] as $key)
+                                @foreach(['linkedin', 'instagram', 'facebook', 'youtube', 'threads', 'whatsapp', 'linktree', 'website'] as $key)
                                     <div class="col-md-6">
                                         <label class="input-label text-capitalize">{{ $key }}</label>
                                         <input type="url" name="social_links[{{ $key }}]" class="form-control"

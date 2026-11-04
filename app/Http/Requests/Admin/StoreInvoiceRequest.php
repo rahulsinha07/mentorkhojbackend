@@ -34,6 +34,23 @@ class StoreInvoiceRequest extends FormRequest
             ]);
         }
 
+        if (is_array($this->mentor_snapshot)) {
+            $snapshot = [];
+            foreach ($this->mentor_snapshot as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+                if (!empty($entry['aadhaar'])) {
+                    $entry['aadhaar'] = preg_replace('/\D/', '', (string) $entry['aadhaar']);
+                    if ($entry['aadhaar'] === '') {
+                        $entry['aadhaar'] = null;
+                    }
+                }
+                $snapshot[] = $entry;
+            }
+            $this->merge(['mentor_snapshot' => $snapshot]);
+        }
+
         $items = $this->input('items', []);
         if (is_array($items)) {
             foreach ($items as $index => $item) {
@@ -119,6 +136,7 @@ class StoreInvoiceRequest extends FormRequest
             'customer_aadhaar' => ['nullable', 'string', 'regex:/^\d{12}$/'],
             'classes_booked' => 'nullable|integer|min:1',
             'mentor_snapshot' => 'nullable|array',
+            'mentor_snapshot.*.aadhaar' => ['nullable', 'string', 'regex:/^\d{12}$/'],
             'customer_external_id' => 'nullable|string|max:64',
             'items' => 'required|array|min:1',
             'items.*.service_name' => 'required|string|max:191',

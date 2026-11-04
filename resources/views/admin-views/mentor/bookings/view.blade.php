@@ -46,6 +46,25 @@
                             <dd class="col-sm-8">{{ $booking->service?->title ?? '—' }}</dd>
                             <dt class="col-sm-4">{{ translate('Preferred date') }}</dt>
                             <dd class="col-sm-8">{{ $booking->preferred_date?->format('Y-m-d') ?? '—' }} {{ $booking->preferred_time }}</dd>
+                            <dt class="col-sm-4">{{ translate('Meeting link') }}</dt>
+                            <dd class="col-sm-8">
+                                @if($booking->meeting_url)
+                                    <a href="{{ $booking->meeting_url }}" target="_blank" rel="noopener">{{ $booking->meeting_url }}</a>
+                                    @if($booking->meeting_link_source === 'zoho')
+                                        <span class="badge badge-soft-primary ml-1">{{ translate('Zoho') }}</span>
+                                    @elseif($booking->meeting_link_source === 'manual')
+                                        <span class="badge badge-soft-secondary ml-1">{{ translate('Manual') }}</span>
+                                    @endif
+                                    <br><small class="text-muted">{{ translate('The Join button becomes active 15 minutes before the session starts.') }}</small>
+                                @else
+                                    <span class="text-muted">{{ translate('Not generated yet') }}</span>
+                                @endif
+                                @if($booking->zoho_last_error)
+                                    <div class="alert alert-warning mt-2 mb-0 p-2" style="font-size: 12px;">
+                                        {{ translate('Zoho link generation failed') }}: {{ $booking->zoho_last_error }}
+                                    </div>
+                                @endif
+                            </dd>
                             <dt class="col-sm-4">{{ translate('Note') }}</dt>
                             <dd class="col-sm-8">{{ $booking->mentee_note ?: '—' }}</dd>
                         </dl>
@@ -71,8 +90,8 @@
                             <dd><span class="badge badge-soft-info">{{ $booking->status }}</span></dd>
                             <dt>{{ translate('Source') }}</dt>
                             <dd>
-                                <span class="badge badge-soft-{{ ($booking->booking_source ?? 'paid') === 'credit' ? 'primary' : 'secondary' }}">
-                                    {{ $booking->booking_source ?? 'paid' }}
+                                <span class="badge badge-soft-{{ in_array($booking->booking_source ?? 'paid', ['session', 'credit'], true) ? 'primary' : 'secondary' }}">
+                                    {{ in_array($booking->booking_source ?? 'paid', ['session', 'credit'], true) ? 'session' : ($booking->booking_source ?? 'paid') }}
                                 </span>
                             </dd>
                             @if($booking->payment_reminder_email_sent_at ?? null)
@@ -84,12 +103,18 @@
                                 <dd><a href="{{ route('admin.orders.details', $booking->legacy_order_id) }}">#{{ $booking->legacy_order_id }}</a></dd>
                             @endif
                         </dl>
-                        @if(\App\CentralLogics\SessionCreditLogic::canMarkComplete($booking))
+                        @if(\App\CentralLogics\SessionCreditLogic::canAdminMarkComplete($booking))
                             <form method="post" action="{{ route('admin.mentor.bookings.complete', $booking->id) }}" class="mt-3" onsubmit="return confirm('Mark this session complete?');">
                                 @csrf
                                 <button type="submit" class="btn btn-sm btn-success">
                                     <i class="tio-checkmark-circle"></i> {{ translate('Mark complete') }}
                                 </button>
+                            </form>
+                        @endif
+                        @if($booking->status === 'confirmed' && \App\CentralLogics\SessionCreditLogic::canMarkNoShow($booking))
+                            <form method="POST" action="{{ route('admin.mentor.bookings.no-show', $booking->id) }}" class="d-inline" onsubmit="return confirm('Mark as no-show?')">
+                                @csrf
+                                <button type="submit" class="btn btn-warning btn-sm">{{ translate('Mark no-show') }}</button>
                             </form>
                         @endif
                         @if(\App\CentralLogics\SessionCreditLogic::canReschedule($booking))

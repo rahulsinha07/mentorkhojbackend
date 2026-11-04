@@ -3,6 +3,7 @@
 namespace App\CentralLogics;
 
 use App\Model\Invoice\InvoiceSetting;
+use Illuminate\Support\Facades\Http;
 
 class InvoiceCompanyProfile
 {
@@ -44,12 +45,17 @@ class InvoiceCompanyProfile
             return asset('storage/app/public/invoice/' . $storedLogo);
         }
 
+        $brandPath = static::mentorkhojBrandLogoPath();
+        if ($brandPath) {
+            return static::mentorkhojBrandLogoUrl();
+        }
+
         $businessLogo = Helpers::get_business_settings('logo');
         if ($businessLogo) {
             return asset('storage/app/public/restaurant/' . $businessLogo);
         }
 
-        return FormMailLogic::brandLogoUrl();
+        return static::mentorkhojBrandLogoUrl();
     }
 
     public static function logoPathForPdf(?string $storedLogo): ?string
@@ -61,6 +67,11 @@ class InvoiceCompanyProfile
             }
         }
 
+        $brandPath = static::mentorkhojBrandLogoPath();
+        if ($brandPath) {
+            return $brandPath;
+        }
+
         $businessLogo = Helpers::get_business_settings('logo');
         if ($businessLogo) {
             $path = storage_path('app/public/restaurant/' . $businessLogo);
@@ -70,5 +81,38 @@ class InvoiceCompanyProfile
         }
 
         return null;
+    }
+
+    public static function mentorkhojBrandLogoUrl(): string
+    {
+        $siteUrl = rtrim((string) config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
+
+        return $siteUrl . '/logo-512.png';
+    }
+
+    public static function mentorkhojBrandLogoPath(): ?string
+    {
+        $cachePath = storage_path('app/public/invoice/mentorkhoj-logo.png');
+        if (is_file($cachePath) && filesize($cachePath) > 512) {
+            return $cachePath;
+        }
+
+        $dir = dirname($cachePath);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+
+        try {
+            $response = Http::timeout(15)->get(static::mentorkhojBrandLogoUrl());
+            if ($response->successful() && strlen($response->body()) > 512) {
+                file_put_contents($cachePath, $response->body());
+
+                return $cachePath;
+            }
+        } catch (\Throwable $e) {
+            // Fall through to legacy logo paths.
+        }
+
+        return is_file($cachePath) && filesize($cachePath) > 0 ? $cachePath : null;
     }
 }

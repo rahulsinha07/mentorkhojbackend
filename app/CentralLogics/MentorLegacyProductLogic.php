@@ -81,6 +81,8 @@ class MentorLegacyProductLogic
             'choice_options' => $payload['choice_options'],
             'discount' => $payload['discount'],
             'discount_type' => $payload['discount_type'],
+            'tax' => $payload['tax'],
+            'tax_type' => $payload['tax_type'],
             'capacity' => $payload['capacity'],
             'updated_at' => now(),
         ]);
@@ -130,7 +132,7 @@ class MentorLegacyProductLogic
             'image' => json_encode(array_values($images)),
             'price' => (float) $first->price,
             'variations' => json_encode($variations),
-            'tax' => 0,
+            'tax' => (float) config('mentor.gst_percent', 18),
             'status' => 1,
             'attributes' => json_encode([]),
             'category_ids' => json_encode($categoryPayload),

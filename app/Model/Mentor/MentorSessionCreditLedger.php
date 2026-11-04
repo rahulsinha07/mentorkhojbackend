@@ -13,6 +13,8 @@ class MentorSessionCreditLedger extends Model
         'credit_id',
         'type',
         'amount',
+        'fund_gross',
+        'fund_net',
         'mentor_booking_id',
         'admin_id',
         'note',
@@ -20,6 +22,8 @@ class MentorSessionCreditLedger extends Model
 
     protected $casts = [
         'amount' => 'integer',
+        'fund_gross' => 'float',
+        'fund_net' => 'float',
     ];
 
     public function credit(): BelongsTo

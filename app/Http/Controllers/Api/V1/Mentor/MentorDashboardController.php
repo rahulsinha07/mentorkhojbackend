@@ -44,6 +44,7 @@ class MentorDashboardController extends Controller
             'checklist' => $checklist,
             'checklist_progress' => MentorLogic::checklistProgress($checklist),
             'earnings_summary' => MentorEarningsLogic::summary($mentor),
+            'payout_details' => json_decode($mentor->settings?->payout_details ?? '{}', true),
             'demo_assignments' => \App\CentralLogics\SessionChatLogic::assignmentsForMentor($mentor),
         ]);
     }
@@ -137,6 +138,7 @@ class MentorDashboardController extends Controller
             'social_links.facebook' => 'nullable|url|max:500',
             'social_links.linkedin' => 'nullable|url|max:500',
             'social_links.youtube' => 'nullable|url|max:500',
+            'social_links.threads' => 'nullable|url|max:500',
             'social_links.whatsapp' => 'nullable|url|max:500',
             'social_links.linktree' => 'nullable|url|max:500',
             'social_links.website' => 'nullable|url|max:500',
@@ -232,12 +234,16 @@ class MentorDashboardController extends Controller
         if ($request->has('availability_json')) {
             $settings->availability_json = json_encode($request->availability_json);
         }
+        if ($request->has('hide_default_reviews')) {
+            $settings->hide_default_reviews = $request->boolean('hide_default_reviews');
+        }
 
         $settings->save();
 
         return response()->json(['message' => 'Settings updated', 'settings' => [
             'payout_details' => json_decode($settings->payout_details ?? '{}', true),
             'share_prefs' => json_decode($settings->share_prefs ?? '{}', true),
+            'hide_default_reviews' => (bool) $settings->hide_default_reviews,
         ]]);
     }
 

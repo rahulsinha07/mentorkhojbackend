@@ -27,10 +27,15 @@ use App\Http\Controllers\Admin\LocationSettingsController;
 use App\Http\Controllers\Admin\LoyaltyPointController;
 use App\Http\Controllers\Admin\MentorController;
 use App\Http\Controllers\Admin\MentorBookingController;
+use App\Http\Controllers\Admin\MentorSessionPackController;
+use App\Http\Controllers\Admin\MentorEarningsAdminController;
+use App\Http\Controllers\Admin\MentorScheduleAdminController;
+use App\Http\Controllers\Admin\ZohoSettingController;
 use App\Http\Controllers\Admin\SessionChatAdminController;
 use App\Http\Controllers\Admin\SeminarController;
 use App\Http\Controllers\Admin\SeminarBookingAdminController;
 use App\Http\Controllers\Admin\DemoBookingAdminController;
+use App\Http\Controllers\Admin\StudentSectionAdminController;
 use App\Http\Controllers\Admin\WhatsAppMessagingAdminController;
 use App\Http\Controllers\Admin\InternshipController;
 use App\Http\Controllers\Admin\NotificationController;
@@ -109,6 +114,21 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('get-distance', [POSController::class, 'getDistance'])->name('get-distance');
             Route::post('order_type/store', [POSController::class, 'orderTypeStore'])->name('order_type.store');
 
+        });
+
+        Route::group(['prefix' => 'session-packs', 'as' => 'session-packs.', 'middleware' => ['module:pos_management']], function () {
+            Route::get('/', [MentorSessionPackController::class, 'index'])->name('index');
+            Route::get('{id}', [MentorSessionPackController::class, 'show'])->name('show');
+            Route::post('bookings/{bookingId}/toggle-complete', [MentorSessionPackController::class, 'toggleComplete'])->name('toggle-complete');
+            Route::post('{id}/toggle-payment', [MentorSessionPackController::class, 'togglePayment'])->name('toggle-payment');
+        });
+
+        Route::group(['prefix' => 'earnings', 'as' => 'earnings.', 'middleware' => ['module:pos_management']], function () {
+            Route::get('/', [MentorEarningsAdminController::class, 'index'])->name('index');
+        });
+
+        Route::group(['prefix' => 'schedules', 'as' => 'schedules.', 'middleware' => ['module:pos_management']], function () {
+            Route::get('/', [MentorScheduleAdminController::class, 'index'])->name('index');
         });
 
         Route::group(['prefix' => 'banner', 'as' => 'banner.','middleware'=>['module:promotion_management']], function () {
@@ -202,7 +222,11 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
 
         Route::group(['prefix' => 'mentor', 'as' => 'mentor.','middleware'=>['module:product_management']], function () {
             Route::get('list', [MentorController::class, 'list'])->name('list');
+            Route::post('category-rank/{id}', [MentorController::class, 'updateCategoryRank'])->name('category-rank');
+            Route::get('toggle-default-reviews/{id}/{hide}', [MentorController::class, 'toggleDefaultReviews'])->name('toggle-default-reviews');
+            Route::post('refresh-category-defaults', [MentorController::class, 'refreshCategoryDefaults'])->name('refresh-category-defaults');
             Route::get('session-messages', [SessionChatAdminController::class, 'index'])->name('session-messages');
+            Route::post('session-messages', [SessionChatAdminController::class, 'store'])->name('session-messages.store');
             Route::get('bookings/analytics', [MentorBookingController::class, 'analytics'])->name('bookings.analytics');
             Route::post('bookings/reminder-1h-toggle', [MentorBookingController::class, 'toggleReminder1h'])->name('bookings.reminder-1h-toggle');
             Route::get('bookings', [MentorBookingController::class, 'list'])->name('bookings.list');
@@ -243,8 +267,18 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
 
         Route::group(['prefix' => 'whatsapp-messaging', 'as' => 'whatsapp-messaging.', 'middleware' => ['module:promotion_management']], function () {
             Route::get('/', [WhatsAppMessagingAdminController::class, 'edit'])->name('edit');
+            Route::get('poll', [WhatsAppMessagingAdminController::class, 'poll'])->name('poll');
             Route::put('/', [WhatsAppMessagingAdminController::class, 'update'])->name('update');
             Route::post('send', [WhatsAppMessagingAdminController::class, 'send'])->name('send');
+        });
+
+        Route::group(['prefix' => 'student-sections', 'as' => 'student-sections.', 'middleware' => ['module:promotion_management']], function () {
+            Route::get('/', [StudentSectionAdminController::class, 'index'])->name('index');
+            Route::put('section', [StudentSectionAdminController::class, 'updateSection'])->name('section');
+            Route::put('templates', [StudentSectionAdminController::class, 'updateTemplates'])->name('templates');
+            Route::post('draft', [StudentSectionAdminController::class, 'updateDraft'])->name('draft');
+            Route::post('whatsapp-link', [StudentSectionAdminController::class, 'whatsappLink'])->name('whatsapp-link');
+            Route::post('send', [StudentSectionAdminController::class, 'send'])->name('send');
         });
 
         Route::group(['prefix' => 'internship', 'as' => 'internship.', 'middleware' => ['module:promotion_management']], function () {
@@ -316,6 +350,15 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::delete('delete/{id}', [CouponController::class, 'delete'])->name('delete');
             Route::get('quick-view-details', [CouponController::class, 'details'])->name('quick-view-details');
 
+        });
+
+        Route::group(['prefix' => 'zoho-settings', 'as' => 'zoho-settings.', 'middleware' => ['module:system_management']], function () {
+            Route::get('/', [ZohoSettingController::class, 'edit'])->name('edit');
+            Route::post('/', [ZohoSettingController::class, 'update'])->name('update');
+            Route::get('/connect', [ZohoSettingController::class, 'connect'])->name('connect');
+            Route::get('/callback', [ZohoSettingController::class, 'callback'])->name('callback');
+            Route::post('/test', [ZohoSettingController::class, 'testConnection'])->name('test');
+            Route::get('/disconnect', [ZohoSettingController::class, 'disconnect'])->name('disconnect');
         });
 
         Route::group(['prefix' => 'business-settings', 'as' => 'business-settings.','middleware'=>['module:system_management']], function () {

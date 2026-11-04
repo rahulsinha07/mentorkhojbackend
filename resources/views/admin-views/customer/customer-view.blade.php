@@ -232,11 +232,11 @@
                                                     <i class="tio-date-range"></i>
                                                 </a>
                                             @endif
-                                            @if(\App\CentralLogics\SessionCreditLogic::canMarkComplete($booking))
+                                            @if(\App\CentralLogics\SessionCreditLogic::canAdminMarkComplete($booking))
                                                 <form method="post" action="{{ route('admin.customer.bookings.complete', $booking->id) }}" class="d-inline" onsubmit="return confirm('Mark this session complete?');">
                                                     @csrf
-                                                    <button type="submit" class="action-btn" title="{{ translate('Mark complete') }}">
-                                                        <i class="tio-checkmark-circle"></i>
+                                                    <button type="submit" class="btn btn-sm btn-success" title="{{ translate('Mark complete') }}">
+                                                        <i class="tio-checkmark-circle"></i> {{ translate('Complete') }}
                                                     </button>
                                                 </form>
                                             @endif
@@ -537,6 +537,19 @@
                     <div class="form-group">
                         <label>{{ translate('Total Amount') }} (₹)</label>
                         <input type="number" name="total_amount" id="sessionCreditsTotalAmount" class="form-control" min="0.01" step="0.01" value="10000" required>
+                    </div>
+                    <div class="form-group">
+                        <label>{{ translate('Platform fee') }}</label>
+                        <select id="sessionCreditsFeeSelect" class="form-control">
+                            <option value="10" selected>10%</option>
+                            <option value="15">15%</option>
+                            <option value="20">20%</option>
+                            <option value="custom">{{ translate('Custom') }}…</option>
+                        </select>
+                        <input type="number" id="sessionCreditsFeeCustom" class="form-control mt-2" min="0" max="100" step="0.01"
+                               placeholder="{{ translate('Enter custom %') }}" style="display:none;">
+                        <input type="hidden" name="platform_fee_percent" id="sessionCreditsFeePercent" value="10">
+                        <small class="text-muted">{{ translate('Only applies when this creates a brand-new session pack for this mentor + student. Topping up an existing pack keeps its original rate.') }}</small>
                     </div>
                     <div class="alert alert-soft-info py-2 px-3 mb-3" id="sessionCreditsFundPreview">
                         <div class="small mb-1"><strong>{{ translate('Fund breakdown') }}</strong></div>
@@ -881,15 +894,27 @@
             $('#rescheduleBookingForm').attr('action', @json(route('admin.customer.bookings.reschedule', ['id' => '__ID__'])).replace('__ID__', bookingId));
         });
 
-        const platformFeePercent = {{ (float) \App\CentralLogics\MentorLogic::platformFeePercent() }};
+        const defaultPlatformFeePercent = {{ (float) \App\CentralLogics\MentorLogic::platformFeePercent() }};
 
         function formatRupee(amount) {
             return '₹' + (Number(amount) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
 
+        function currentFeePercent() {
+            const selected = $('#sessionCreditsFeeSelect').val();
+            if (selected === 'custom') {
+                const custom = parseFloat($('#sessionCreditsFeeCustom').val());
+                return Number.isFinite(custom) && custom >= 0 && custom <= 100 ? custom : defaultPlatformFeePercent;
+            }
+            return parseFloat(selected) || defaultPlatformFeePercent;
+        }
+
         function updateSessionCreditsFundPreview() {
             const credits = Math.max(1, parseInt($('#sessionCreditsCount').val(), 10) || 1);
             const total = Math.max(0, parseFloat($('#sessionCreditsTotalAmount').val()) || 0);
+            const platformFeePercent = currentFeePercent();
+            $('#sessionCreditsFeePercent').val(platformFeePercent);
+
             const perSessionGross = total / credits;
             const perSessionFee = perSessionGross * (platformFeePercent / 100);
             const perSessionNet = perSessionGross - perSessionFee;
@@ -903,7 +928,11 @@
             );
         }
 
-        $('#sessionCreditsCount, #sessionCreditsTotalAmount').on('input change', updateSessionCreditsFundPreview);
+        $('#sessionCreditsFeeSelect').on('change', function () {
+            $('#sessionCreditsFeeCustom').toggle($(this).val() === 'custom');
+            updateSessionCreditsFundPreview();
+        });
+        $('#sessionCreditsCount, #sessionCreditsTotalAmount, #sessionCreditsFeeCustom').on('input change', updateSessionCreditsFundPreview);
         updateSessionCreditsFundPreview();
     </script>
 @endpush

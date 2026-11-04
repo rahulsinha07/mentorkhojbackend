@@ -293,6 +293,7 @@ class CustomerController extends Controller
             'mentor_id' => 'required|integer|exists:mentors,id',
             'credits' => 'required|integer|min:1|max:500',
             'total_amount' => 'required|numeric|min:0.01|max:9999999',
+            'platform_fee_percent' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string|max:2000',
             'schedule_now' => 'nullable|boolean',
             'start_date' => 'required_if:schedule_now,1|nullable|date',
@@ -310,7 +311,10 @@ class CustomerController extends Controller
                 (int) $validated['credits'],
                 (float) $validated['total_amount'],
                 auth('admin')->id(),
-                $validated['notes'] ?? null
+                $validated['notes'] ?? null,
+                isset($validated['platform_fee_percent']) && $validated['platform_fee_percent'] !== ''
+                    ? (float) $validated['platform_fee_percent']
+                    : null
             );
 
             if (!empty($validated['schedule_now'])) {
@@ -368,7 +372,7 @@ class CustomerController extends Controller
         $booking = MentorBooking::findOrFail($id);
 
         try {
-            SessionCreditLogic::markComplete($booking);
+            SessionCreditLogic::markComplete($booking, true);
             Toastr::success(translate('Session marked complete'));
         } catch (\Throwable $e) {
             Toastr::error($e->getMessage());

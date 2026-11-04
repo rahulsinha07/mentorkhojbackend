@@ -29,6 +29,10 @@ class InvoicePdfLogic
             ),
             'maskCustomerPii' => $maskCustomerPii,
             'customer_display' => InvoicePrivacyLogic::customerDisplayForInvoice($invoice, $maskCustomerPii),
+            'mentors_display' => InvoicePrivacyLogic::mentorsDisplayForInvoice(
+                is_array($invoice->mentor_snapshot) ? $invoice->mentor_snapshot : null,
+                $maskCustomerPii
+            ),
             'mentorkhoj_url' => rtrim((string) ($company['website'] ?? 'https://www.mentorkhoj.com/'), '/'),
         ];
     }
@@ -67,9 +71,9 @@ class InvoicePdfLogic
     }
 
     /** @return string Raw PDF bytes for email attachment */
-    public static function rawBytes(Invoice $invoice): string
+    public static function rawBytes(Invoice $invoice, bool $maskCustomerPii = false): string
     {
-        $html = static::renderHtml($invoice, false);
+        $html = static::renderHtml($invoice, $maskCustomerPii);
         $mpdf = static::createMpdf();
         $mpdf->WriteHTML($html);
 

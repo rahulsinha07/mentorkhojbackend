@@ -68,6 +68,12 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
     Route::match(['get', 'post'], 'whatsapp/webhook', [\App\Http\Controllers\Api\V1\WhatsAppWebhookController::class, 'handle'])
         ->withoutMiddleware('throttle');
 
+    // SaaS inbox ↔ Laravel message mirror (secret header X-Inbox-Sync-Secret)
+    Route::post('whatsapp/inbox/ingest', [\App\Http\Controllers\Api\V1\WhatsAppInboxSyncController::class, 'ingest'])
+        ->withoutMiddleware('throttle');
+    Route::get('whatsapp/inbox/export', [\App\Http\Controllers\Api\V1\WhatsAppInboxSyncController::class, 'export'])
+        ->withoutMiddleware('throttle');
+
     Route::group(['prefix' => 'products'], function () {
         Route::get('all', [ProductController::class, 'getAllProducts']);
         Route::get('latest', [ProductController::class, 'getLatestProducts']);

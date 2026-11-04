@@ -10,6 +10,10 @@ class WhatsAppWebLink
         if ($digits === '') {
             return null;
         }
+        $digits = ltrim($digits, '0');
+        if ($digits === '') {
+            return null;
+        }
         if (strlen($digits) === 10) {
             $digits = '91'.$digits;
         }

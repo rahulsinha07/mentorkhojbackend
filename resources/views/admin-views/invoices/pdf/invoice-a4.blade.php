@@ -8,6 +8,7 @@
         'aadhaar' => $invoice->customer_aadhaar ?? null,
     ];
     $mentorkhojUrl = $mentorkhoj_url ?? ($company['website'] ?? 'https://www.mentorkhoj.com/');
+    $mentorsDisplay = $mentors_display ?? [];
 @endphp
 <style>
     .inv-wrap { font-family: DejaVu Sans, Arial, sans-serif; color:#1a1a1a; font-size:12px; line-height:1.45; }
@@ -78,6 +79,18 @@
                 </div>
             </td>
             <td style="border:0;">
+                @if(!empty($mentorsDisplay))
+                <div class="inv-box" style="margin-bottom:8px;">
+                    <h4>Mentor / Service Provider</h4>
+                    @foreach($mentorsDisplay as $mentor)
+                        <div style="margin-bottom:6px;">
+                            <strong>{{ $mentor['name'] ?? 'Mentor' }}</strong><br>
+                            @if(!empty($mentor['aadhaar']))Aadhaar: {{ $mentor['aadhaar'] }}<br>@endif
+                            @if(!empty($mentor['profile_url']))<span style="color:#666;font-size:10px;">{{ $mentor['profile_url'] }}</span>@endif
+                        </div>
+                    @endforeach
+                </div>
+                @endif
                 @if($invoice->shipping_address && $invoice->shipping_address !== $invoice->billing_address)
                 <div class="inv-box">
                     <h4>Ship To</h4>

@@ -5,9 +5,13 @@ namespace App\Http\Controllers\Api\V1\Mentor;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorBookingLogic;
 use App\CentralLogics\MentorBookingMailLogic;
+use App\CentralLogics\MentorFeedbackMailLogic;
+use App\CentralLogics\UserNotificationLogic;
 use App\CentralLogics\MentorLegacyProductLogic;
 use App\CentralLogics\MentorLogic;
+use App\CentralLogics\MentorSessionLifecycleLogic;
 use App\CentralLogics\SessionCreditLogic;
+use App\CentralLogics\SessionIcsLogic;
 use App\Http\Controllers\Controller;
 use App\Model\Branch;
 use App\Model\Mentor\Mentor;
@@ -25,6 +29,20 @@ class MentorBookingController extends Controller
         $mentor = Mentor::published()->find($id);
         if (!$mentor) {
             return response()->json(['errors' => [['message' => 'Mentor not found']]], 404);
+        }
+
+        $user = $request->user();
+        if ($user) {
+            $isMentorAccount = ($user->account_type ?? '') === 'mentor';
+            $ownsMentorProfile = Mentor::where('user_id', $user->id)->exists();
+            $bookingOwnProfile = (int) ($mentor->user_id ?? 0) === (int) $user->id;
+            if ($isMentorAccount || $ownsMentorProfile || $bookingOwnProfile) {
+                return response()->json([
+                    'errors' => [[
+                        'message' => 'This is a mentor account. Please create a new student account and book from there.',
+                    ]],
+                ], 403);
+            }
         }
 
         $validator = Validator::make($request->all(), [
@@ -52,7 +70,7 @@ class MentorBookingController extends Controller
             return response()->json(['errors' => [['message' => $payableError]]], 422);
         }
 
-        $menteeId = $request->user()?->id;
+        $menteeId = $user?->id;
 
         if ($menteeId) {
             $existing = MentorBookingLogic::findRetryableBooking($menteeId, $mentor->id, $service->id);
@@ -60,6 +78,9 @@ class MentorBookingController extends Controller
                 if ($existing->payment_status === 'failed') {
                     $existing = MentorBookingLogic::prepareForPaymentRetry($existing);
                 }
+
+                // Upgrade legacy ₹0 free bookings to platform fee + GST.
+                $existing = MentorBookingLogic::ensurePlatformFeeOnFreeBooking($existing, $mentor, $service);
 
                 $existing->update([
                     'preferred_date' => $request->preferred_date ?? $existing->preferred_date,
@@ -103,8 +124,16 @@ class MentorBookingController extends Controller
 
     public function mySessionCredits(Request $request): JsonResponse
     {
+        return $this->mySessions($request);
+    }
+
+    public function mySessions(Request $request): JsonResponse
+    {
+        $sessions = SessionCreditLogic::sessionsForMentee((int) $request->user()->id)->values();
+
         return response()->json([
-            'credits' => SessionCreditLogic::creditsForMentee((int) $request->user()->id)->values(),
+            'sessions' => $sessions,
+            'credits' => $sessions,
         ]);
     }
 
@@ -148,7 +177,7 @@ class MentorBookingController extends Controller
     {
         MentorBookingLogic::syncPendingPaidBookingsForUser((int) $request->user()->id);
 
-        $booking = MentorBooking::with(['service', 'mentor'])
+        $booking = MentorBooking::with(['service', 'mentor', 'events'])
             ->where('mentee_user_id', $request->user()->id)
             ->find($id);
 
@@ -232,13 +261,21 @@ class MentorBookingController extends Controller
 
     public function mentorSessionCredits(Request $request): JsonResponse
     {
+        return $this->mentorSessions($request);
+    }
+
+    public function mentorSessions(Request $request): JsonResponse
+    {
         $mentor = Mentor::where('user_id', $request->user()->id)->first();
         if (!$mentor) {
             return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
         }
 
+        $sessions = SessionCreditLogic::sessionsForMentor((int) $mentor->id)->values();
+
         return response()->json([
-            'credits' => SessionCreditLogic::creditsForMentor((int) $mentor->id)->values(),
+            'sessions' => $sessions,
+            'credits' => $sessions,
         ]);
     }
 
@@ -309,6 +346,116 @@ class MentorBookingController extends Controller
         ]);
     }
 
+    public function scheduleMyBooking(Request $request, int $id): JsonResponse
+    {
+        $booking = MentorBooking::where('mentee_user_id', $request->user()->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return $this->handleSchedule($request, $booking, $request->user(), false);
+    }
+
+    public function requestReschedule(Request $request, int $id): JsonResponse
+    {
+        $booking = MentorBooking::where('mentee_user_id', $request->user()->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'preferred_date' => 'required|date',
+            'preferred_time' => 'required|string|max:32',
+            'reason' => 'nullable|string|max:2000',
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['errors' => Helpers::error_processor($validator)], 422);
+        }
+
+        try {
+            $booking = MentorSessionLifecycleLogic::requestReschedule($booking, $request->user(), $request->all());
+        } catch (\Throwable $e) {
+            return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Reschedule request sent to your mentor.',
+            'booking' => MentorBookingLogic::formatBooking($booking),
+        ]);
+    }
+
+    public function scheduleMentorBooking(Request $request, int $id): JsonResponse
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::where('mentor_id', $mentor->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return $this->handleSchedule($request, $booking, $request->user(), true);
+    }
+
+    public function approveReschedule(Request $request, int $id): JsonResponse
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::where('mentor_id', $mentor->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        try {
+            $booking = MentorSessionLifecycleLogic::approveReschedule($booking, $request->user());
+        } catch (\Throwable $e) {
+            return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Reschedule approved.',
+            'booking' => MentorBookingLogic::formatBooking($booking, true),
+        ]);
+    }
+
+    public function rejectReschedule(Request $request, int $id): JsonResponse
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::where('mentor_id', $mentor->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        $validated = $request->validate(['reason' => 'nullable|string|max:2000']);
+
+        try {
+            $booking = MentorSessionLifecycleLogic::rejectReschedule(
+                $booking,
+                $request->user(),
+                $validated['reason'] ?? null
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Reschedule request rejected.',
+            'booking' => MentorBookingLogic::formatBooking($booking, true),
+        ]);
+    }
+
     public function updateSchedule(Request $request, int $id): JsonResponse
     {
         $mentor = Mentor::where('user_id', $request->user()->id)->first();
@@ -321,63 +468,49 @@ class MentorBookingController extends Controller
             return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
         }
 
-        return $this->applyScheduleUpdate($request, $booking, true);
+        return $this->handleSchedule($request, $booking, $request->user(), true);
     }
 
-    private function applyScheduleUpdate(Request $request, MentorBooking $booking, bool $forMentor): JsonResponse
+    private function handleSchedule(Request $request, MentorBooking $booking, $actor, bool $forMentor): JsonResponse
     {
-        if (!SessionCreditLogic::canReschedule($booking)) {
-            return response()->json(['errors' => [['message' => 'Only upcoming sessions can be rescheduled']]], 422);
-        }
-
-        if (!in_array((string) $booking->status, ['confirmed', 'requested'], true)) {
-            return response()->json(['errors' => [['message' => 'Confirm the request before setting date and time']]], 422);
-        }
-
         $validator = Validator::make($request->all(), [
             'preferred_date' => 'required|date',
             'preferred_time' => 'required|string|max:32',
+            'session_type' => 'nullable|string|max:32',
+            'meeting_url' => 'nullable|string|max:512',
+            'mentor_notes' => 'nullable|string|max:2000',
+            'mentee_notes' => 'nullable|string|max:2000',
+            'duration_minutes' => 'nullable|integer|min:5|max:480',
+            'timezone' => 'nullable|string|max:64',
         ]);
         if ($validator->fails()) {
             return response()->json(['errors' => Helpers::error_processor($validator)], 422);
         }
 
-        $timeRaw = (string) $request->preferred_time;
-        $time = strlen($timeRaw) === 5 ? $timeRaw.':00' : $timeRaw;
         try {
-            $when = \Carbon\Carbon::parse($request->preferred_date.' '.$time);
+            if (in_array((string) $booking->status, ['assigned', 'requested'], true)) {
+                $booking = MentorSessionLifecycleLogic::scheduleSession($booking, $request->all(), $actor);
+            } elseif ($forMentor) {
+                $booking = MentorSessionLifecycleLogic::rescheduleDirect($booking, $actor, $request->all());
+            } elseif ((string) $booking->status === 'confirmed') {
+                $booking = MentorSessionLifecycleLogic::requestReschedule($booking, $actor, $request->all());
+            } else {
+                return response()->json(['errors' => [['message' => 'This session cannot be scheduled in its current state']]], 422);
+            }
         } catch (\Throwable $e) {
-            return response()->json(['errors' => [['message' => 'Invalid date or time']]], 422);
+            return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);
         }
-        if ($when->lt(now()->subMinute())) {
-            return response()->json(['errors' => [['message' => 'Choose a date and time from now onward']]], 422);
-        }
-
-        if ($booking->status === 'requested') {
-            $booking->status = 'confirmed';
-        }
-
-        $alreadyNotified = (bool) $booking->schedule_notify_sent_at;
-        $prevDate = $booking->preferred_date ? $booking->preferred_date->format('Y-m-d') : '';
-        $prevTime = (string) ($booking->preferred_time ?? '');
-
-        $booking->preferred_date = $request->preferred_date;
-        $booking->preferred_time = $time;
-        if (\Illuminate\Support\Facades\Schema::hasColumn('mentor_bookings', 'session_reminder_24h_sent_at')) {
-            $booking->session_reminder_24h_sent_at = null;
-        }
-        $booking->save();
-
-        $changed = $prevDate !== (string) $request->preferred_date || $prevTime !== $time;
-        $notified = MentorBookingMailLogic::sendScheduleConfirmedNotify($booking, $alreadyNotified && $changed);
 
         return response()->json([
             'ok' => true,
-            'message' => $notified
-                ? 'Time saved. The other party was emailed (WhatsApp sent if configured).'
-                : 'Time saved.',
-            'booking' => MentorBookingLogic::formatBooking($booking->fresh(['service', 'mentee', 'mentor']), $forMentor),
+            'message' => 'Session scheduled.',
+            'booking' => MentorBookingLogic::formatBooking($booking->fresh(['service', 'mentee', 'mentor', 'events']), $forMentor),
         ]);
+    }
+
+    private function applyScheduleUpdate(Request $request, MentorBooking $booking, bool $forMentor): JsonResponse
+    {
+        return $this->handleSchedule($request, $booking, $request->user(), $forMentor);
     }
 
     public function checkoutContext(Request $request, int $id): JsonResponse
@@ -407,6 +540,9 @@ class MentorBookingController extends Controller
         }
 
         $mentor = $booking->mentor;
+        if ($mentor && $booking->service && (float) $booking->amount <= 0) {
+            $booking = MentorBookingLogic::ensurePlatformFeeOnFreeBooking($booking, $mentor, $booking->service);
+        }
         $legacyProductId = $mentor?->legacy_product_id;
         if (!$legacyProductId) {
             return response()->json([
@@ -465,9 +601,9 @@ class MentorBookingController extends Controller
 
     private static function paidBookingProductError(Mentor $mentor, MentorService $service): ?string
     {
-        $amount = (float) $service->price;
-        $taxAmount = MentorBookingLogic::calculateTaxAmount($mentor, $amount);
-        if ($amount + $taxAmount <= 0) {
+        // Free sessions still charge ₹10 + GST platform fee — require online payment product.
+        $payable = MentorBookingLogic::resolvePayableAmounts($mentor, $service);
+        if ($payable['total'] <= 0) {
             return null;
         }
 
@@ -477,4 +613,214 @@ class MentorBookingController extends Controller
 
         return null;
     }
+
+
+    public function showMentorBooking(Request $request, int $id): JsonResponse
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::with(['service', 'mentee', 'events'])
+            ->where('mentor_id', $mentor->id)
+            ->find($id);
+
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return response()->json([
+            'booking' => MentorBookingLogic::formatBooking($booking, true),
+        ]);
+    }
+
+    public function bookingHistory(Request $request, int $id): JsonResponse
+    {
+        $userId = (int) $request->user()->id;
+        $booking = MentorBooking::with(['events'])->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        $mentor = Mentor::where('user_id', $userId)->first();
+        $allowed = (int) $booking->mentee_user_id === $userId
+            || ($mentor && (int) $booking->mentor_id === (int) $mentor->id);
+        if (!$allowed) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return response()->json([
+            'events' => $booking->events->map(fn ($e) => [
+                'id' => $e->id,
+                'event_type' => $e->event_type,
+                'type' => $e->event_type,
+                'actor_user_id' => $e->actor_user_id,
+                'payload' => $e->payload,
+                'created_at' => $e->created_at?->toIso8601String(),
+            ])->values(),
+        ]);
+    }
+
+    public function cancelMyBooking(Request $request, int $id): JsonResponse
+    {
+        $booking = MentorBooking::where('mentee_user_id', $request->user()->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return $this->handleCancel($request, $booking, false);
+    }
+
+    public function cancelMentorBooking(Request $request, int $id): JsonResponse
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::where('mentor_id', $mentor->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return $this->handleCancel($request, $booking, true);
+    }
+
+    public function markNoShow(Request $request, int $id): JsonResponse
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::where('mentor_id', $mentor->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        $validated = $request->validate(['reason' => 'nullable|string|max:2000']);
+
+        try {
+            $booking = MentorSessionLifecycleLogic::markNoShow(
+                $booking,
+                $request->user(),
+                $validated['reason'] ?? null
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Session marked as no-show.',
+            'booking' => MentorBookingLogic::formatBooking($booking, true),
+        ]);
+    }
+
+    /**
+     * Mentor requests feedback on a completed session. Sends the student a
+     * MentorKhoj-branded email (CC'd to the MentorKhoj notify address, never
+     * direct mentor-to-mentee email) plus an in-app notification. Only
+     * allowed on the mentor's own completed bookings, with a 24h cooldown
+     * between requests on the same booking to avoid spamming the student.
+     */
+    public function requestFeedback(Request $request, int $id): JsonResponse
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::where('mentor_id', $mentor->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        if (!$booking->completed_at) {
+            return response()->json(['errors' => [['message' => 'You can request feedback once this session is completed.']]], 422);
+        }
+
+        if (
+            $booking->feedback_requested_at
+            && $booking->feedback_requested_at->gt(now()->subHours(24))
+        ) {
+            return response()->json(['errors' => [['message' => 'Feedback was already requested recently for this session. Try again later.']]], 429);
+        }
+
+        $booking->feedback_requested_at = now();
+        $booking->save();
+
+        UserNotificationLogic::notifyFeedbackRequested($booking);
+        MentorFeedbackMailLogic::sendFeedbackRequest($booking);
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Feedback request sent.',
+            'booking' => MentorBookingLogic::formatBooking($booking, true),
+        ]);
+    }
+
+    public function downloadMyIcs(Request $request, int $id)
+    {
+        $booking = MentorBooking::where('mentee_user_id', $request->user()->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return $this->icsResponse($booking);
+    }
+
+    public function downloadMentorIcs(Request $request, int $id)
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::where('mentor_id', $mentor->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return $this->icsResponse($booking);
+    }
+
+    private function handleCancel(Request $request, MentorBooking $booking, bool $forMentor): JsonResponse
+    {
+        $validated = $request->validate(['reason' => 'required|string|max:2000']);
+
+        try {
+            $booking = MentorSessionLifecycleLogic::cancelSession(
+                $booking,
+                $request->user(),
+                $validated['reason']
+            );
+        } catch (\Throwable $e) {
+            return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => SessionCreditLogic::isSessionPackBooking($booking) && $booking->status === 'assigned'
+                ? 'Session released back to pending schedule.'
+                : 'Session cancelled.',
+            'booking' => MentorBookingLogic::formatBooking($booking->fresh(['service', 'mentee', 'mentor', 'events']), $forMentor),
+        ]);
+    }
+
+    private function icsResponse(MentorBooking $booking)
+    {
+        try {
+            $ics = SessionIcsLogic::generate($booking);
+        } catch (\Throwable $e) {
+            return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);
+        }
+
+        return response($ics, 200, [
+            'Content-Type' => 'text/calendar; charset=utf-8',
+            'Content-Disposition' => 'attachment; filename="'.SessionIcsLogic::filename($booking).'"',
+        ]);
+    }
+
 }

@@ -6,8 +6,11 @@ use App\CentralLogics\FormMailLogic;
 use App\CentralLogics\InvoiceCalculationLogic;
 use App\CentralLogics\InvoiceCompanyProfile;
 use App\CentralLogics\InvoiceNumberLogic;
+use App\CentralLogics\MentorAgreementLogic;
+use App\CentralLogics\MentorAgreementPdfLogic;
 use App\CentralLogics\InvoicePdfLogic;
 use App\CentralLogics\InvoicePrefillLogic;
+use App\CentralLogics\InvoiceWhatsAppLogic;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreInvoiceRequest;
 use App\Http\Requests\Admin\UpdateInvoiceRequest;
@@ -137,13 +140,25 @@ class InvoiceAdminController extends Controller
             ->with('success', translate('Invoice saved successfully'));
     }
 
-    public function show(int $id): View
+    public function show(Request $request, int $id): View
     {
         $invoice = Invoice::with(['items', 'createdBy'])->findOrFail($id);
         $company = InvoiceCompanyProfile::mergedWithSettings();
-        $pdfData = InvoicePdfLogic::viewData($invoice);
+        $pdfData = InvoicePdfLogic::viewData($invoice, null, true);
+        $mentorsForAgreement = MentorAgreementLogic::mentorsForAgreement($invoice);
+        $selectedMentorId = (int) $request->query('mentor_id', $mentorsForAgreement[0]['id'] ?? 0);
+        $selectedMentorForAgreement = collect($mentorsForAgreement)->firstWhere('id', $selectedMentorId);
 
-        return view('admin-views.invoices.show', compact('invoice', 'company', 'pdfData'));
+        return view('admin-views.invoices.show', compact(
+            'invoice',
+            'company',
+            'pdfData',
+            'mentorsForAgreement',
+            'selectedMentorId',
+            'selectedMentorForAgreement'
+        ) + [
+            'whatsappNotifyPhone' => InvoiceWhatsAppLogic::recipientDisplay(),
+        ]);
     }
 
     public function edit(int $id): View|RedirectResponse
@@ -242,7 +257,7 @@ class InvoiceAdminController extends Controller
     public function print(int $id): View
     {
         $invoice = Invoice::with('items')->findOrFail($id);
-        $pdfData = InvoicePdfLogic::viewData($invoice);
+        $pdfData = InvoicePdfLogic::viewData($invoice, null, true);
 
         return view('admin-views.invoices.print', $pdfData);
     }
@@ -267,6 +282,103 @@ class InvoiceAdminController extends Controller
         }
 
         return back()->with('success', translate('Invoice sent successfully'));
+    }
+
+    public function sendWhatsApp(int $id): RedirectResponse
+    {
+        $invoice = Invoice::with('items')->findOrFail($id);
+        $result = InvoiceWhatsAppLogic::send($invoice);
+        $displayPhone = InvoiceWhatsAppLogic::recipientDisplay();
+
+        if ($result['status'] === 'success') {
+            if (in_array($invoice->status, ['draft', 'generated'], true)) {
+                $invoice->status = 'sent';
+                $invoice->save();
+            }
+
+            return back()->with(
+                'success',
+                translate('Invoice sent on WhatsApp to') . ' ' . $displayPhone
+            );
+        }
+
+        $webUrl = InvoiceWhatsAppLogic::webUrl($invoice);
+        if (!$webUrl) {
+            return back()->with('error', translate('Could not open WhatsApp'));
+        }
+
+        return redirect()->away($webUrl);
+    }
+
+    public function whatsappRedirect(int $id): RedirectResponse
+    {
+        $invoice = Invoice::with('items')->findOrFail($id);
+        $url = InvoiceWhatsAppLogic::webUrl($invoice);
+
+        if (!$url) {
+            return redirect()->route('admin.invoices.show', $invoice->id)
+                ->with('error', translate('Could not open WhatsApp'));
+        }
+
+        return redirect()->away($url);
+    }
+
+    public function mentorAgreementPdf(int $id, int $mentorId)
+    {
+        $invoice = Invoice::with('items')->findOrFail($id);
+        $mentor = MentorAgreementLogic::resolveMentor($invoice, $mentorId);
+
+        return MentorAgreementPdfLogic::download($invoice, $mentor);
+    }
+
+    public function mentorAgreementPrint(int $id, int $mentorId): View
+    {
+        $invoice = Invoice::with('items')->findOrFail($id);
+        $mentor = MentorAgreementLogic::resolveMentor($invoice, $mentorId);
+        $agreementData = MentorAgreementPdfLogic::viewData($invoice, $mentor, true);
+
+        return view('admin-views.invoices.mentor-agreement-print', $agreementData);
+    }
+
+    public function sendMentorAgreementWhatsApp(int $id, int $mentorId): RedirectResponse
+    {
+        $invoice = Invoice::with('items')->findOrFail($id);
+        $mentor = MentorAgreementLogic::resolveMentor($invoice, $mentorId);
+        $result = InvoiceWhatsAppLogic::sendMentorAgreement($invoice, $mentor);
+        $displayPhone = InvoiceWhatsAppLogic::recipientDisplay();
+        $mentorName = $mentor->display_name ?? 'Mentor';
+
+        if ($result['status'] === 'success') {
+            return back()->with(
+                'success',
+                translate('Mentor Service Agreement sent on WhatsApp to') . ' ' . $displayPhone
+                    . ' (' . $mentorName . ')'
+            );
+        }
+
+        $pdfUrl = InvoiceWhatsAppLogic::mentorAgreementPublicPdfUrl($invoice, $mentor);
+        $text = InvoiceWhatsAppLogic::mentorAgreementShareText($invoice, $mentor, $pdfUrl);
+        $webUrl = InvoiceWhatsAppLogic::mentorAgreementWebUrl($invoice, $mentor);
+
+        if (!$webUrl) {
+            return back()->with('error', translate('Could not open WhatsApp'));
+        }
+
+        return redirect()->away($webUrl);
+    }
+
+    public function mentorAgreementWhatsappRedirect(int $id, int $mentorId): RedirectResponse
+    {
+        $invoice = Invoice::with('items')->findOrFail($id);
+        $mentor = MentorAgreementLogic::resolveMentor($invoice, $mentorId);
+        $url = InvoiceWhatsAppLogic::mentorAgreementWebUrl($invoice, $mentor);
+
+        if (!$url) {
+            return redirect()->route('admin.invoices.show', ['id' => $invoice->id, 'mentor_id' => $mentorId])
+                ->with('error', translate('Could not open WhatsApp'));
+        }
+
+        return redirect()->away($url);
     }
 
     public function prefillOrder(int $orderId): JsonResponse
@@ -391,7 +503,9 @@ class InvoiceAdminController extends Controller
                 'customer_pan' => $data['customer_pan'] ?? null,
                 'customer_aadhaar' => isset($data['customer_aadhaar']) ? preg_replace('/\D/', '', $data['customer_aadhaar']) : null,
                 'classes_booked' => $data['classes_booked'] ?? null,
-                'mentor_snapshot' => !empty($data['mentor_snapshot']) ? $data['mentor_snapshot'] : null,
+                'mentor_snapshot' => !empty($data['mentor_snapshot'])
+                    ? static::normalizeMentorSnapshot($data['mentor_snapshot'])
+                    : null,
                 'customer_external_id' => $data['customer_external_id'] ?? null,
                 'subtotal' => $totals['subtotal'],
                 'discount_total' => $totals['discount_total'],
@@ -455,7 +569,7 @@ class InvoiceAdminController extends Controller
         return Mentor::query()
             ->with(['enabledServices' => fn ($q) => $q->limit(1)])
             ->orderBy('display_name')
-            ->get(['id', 'display_name', 'username', 'headline'])
+            ->get(['id', 'display_name', 'username', 'headline', 'aadhaar'])
             ->map(function (Mentor $mentor) {
                 $service = $mentor->enabledServices->first();
 
@@ -464,9 +578,30 @@ class InvoiceAdminController extends Controller
                     'display_name' => $mentor->display_name,
                     'username' => $mentor->username,
                     'headline' => $mentor->headline,
+                    'aadhaar' => $mentor->aadhaar,
                     'default_price' => $service ? (float) $service->price : 0,
                     'service_title' => $service->title ?? null,
                 ];
             });
+    }
+
+    /** @param array<int, mixed> $snapshot @return list<array<string, mixed>> */
+    private static function normalizeMentorSnapshot(array $snapshot): array
+    {
+        $normalized = [];
+        foreach ($snapshot as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            if (!empty($entry['aadhaar'])) {
+                $entry['aadhaar'] = preg_replace('/\D/', '', (string) $entry['aadhaar']);
+                if ($entry['aadhaar'] === '') {
+                    $entry['aadhaar'] = null;
+                }
+            }
+            $normalized[] = $entry;
+        }
+
+        return $normalized;
     }
 }

@@ -25,6 +25,7 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         $schedule->command('mentorkhoj:send-session-reminders-24h')->hourly();
+        $schedule->command('mentorkhoj:send-session-reminders-1h')->everyFiveMinutes();
         $schedule->command('mentors:audit-legacy-products --published')->weekly();
     }
 

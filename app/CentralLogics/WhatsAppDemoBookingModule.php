@@ -18,6 +18,8 @@ class WhatsAppDemoBookingModule
         'jee' => 'mentorkhoj_util_demo_jee',
         'tech' => 'mentorkhoj_util_demo_tech',
         'ai' => 'mentorkhoj_util_demo_ai',
+        'session_scheduled' => 'mentorkhoj_util_session_scheduled',
+        'new_message' => 'mentorkhoj_util_new_message',
     ];
 
     private const PROGRAMS = [
@@ -263,6 +265,123 @@ class WhatsAppDemoBookingModule
                 'components' => $components,
             ],
         ], 'session', 'Session confirmed: ' . $template, 'template');
+        $result['template'] = $template;
+
+        return $result;
+    }
+
+    /**
+     * Session date/time + join link confirmed — sent to one recipient at a
+     * time (mentor or mentee); the caller sends it once per side with the
+     * counterpart's name and that recipient's own details link.
+     *
+     * @return array{status:string,template:string,message?:string}
+     */
+    public static function sendSessionScheduled(
+        string $phone,
+        string $recipientFirstName,
+        string $otherPartyName,
+        string $date,
+        string $time,
+        string $joinLink,
+        string $detailsLink
+    ): array {
+        $cfg = self::messagingConfig();
+        $template = $cfg['templates']['session_scheduled'] ?? 'mentorkhoj_util_session_scheduled';
+
+        if (!$cfg['enabled']) {
+            return [
+                'status' => 'not_configured',
+                'template' => $template,
+                'message' => 'WhatsApp messaging not enabled',
+            ];
+        }
+
+        $to = preg_replace('/[^0-9]/', '', $phone) ?? '';
+        if ($to === '') {
+            return ['status' => 'error', 'template' => $template, 'message' => 'Invalid phone'];
+        }
+        if (strlen($to) === 10) {
+            $to = '91' . $to;
+        }
+
+        $components = [
+            [
+                'type' => 'body',
+                'parameters' => [
+                    ['type' => 'text', 'text' => self::sanitize($recipientFirstName !== '' ? $recipientFirstName : 'there', 40)],
+                    ['type' => 'text', 'text' => self::sanitize($otherPartyName !== '' ? $otherPartyName : 'your session partner', 60)],
+                    ['type' => 'text', 'text' => self::sanitize($date, 40)],
+                    ['type' => 'text', 'text' => self::sanitize($time, 40)],
+                    ['type' => 'text', 'text' => self::sanitize($joinLink, 200)],
+                    ['type' => 'text', 'text' => self::sanitize($detailsLink, 200)],
+                ],
+            ],
+        ];
+
+        $result = WhatsAppCloudApi::send($to, [
+            'type' => 'template',
+            'template' => [
+                'name' => $template,
+                'language' => ['code' => $cfg['template_language']],
+                'components' => $components,
+            ],
+        ], 'session', 'Session scheduled: ' . $template, 'template');
+        $result['template'] = $template;
+
+        return $result;
+    }
+
+    /**
+     * "You have a new message, check the website" — fired only when a
+     * mentor/mentee explicitly clicks the chat's "Notify on WhatsApp" button.
+     *
+     * @return array{status:string,template:string,message?:string}
+     */
+    public static function sendNewMessageNotify(
+        string $phone,
+        string $recipientFirstName,
+        string $senderLabel,
+        string $link
+    ): array {
+        $cfg = self::messagingConfig();
+        $template = $cfg['templates']['new_message'] ?? 'mentorkhoj_util_new_message';
+
+        if (!$cfg['enabled']) {
+            return [
+                'status' => 'not_configured',
+                'template' => $template,
+                'message' => 'WhatsApp messaging not enabled',
+            ];
+        }
+
+        $to = preg_replace('/[^0-9]/', '', $phone) ?? '';
+        if ($to === '') {
+            return ['status' => 'error', 'template' => $template, 'message' => 'Invalid phone'];
+        }
+        if (strlen($to) === 10) {
+            $to = '91' . $to;
+        }
+
+        $components = [
+            [
+                'type' => 'body',
+                'parameters' => [
+                    ['type' => 'text', 'text' => self::sanitize($recipientFirstName !== '' ? $recipientFirstName : 'there', 40)],
+                    ['type' => 'text', 'text' => self::sanitize($senderLabel !== '' ? $senderLabel : 'MentorKhoj', 40)],
+                    ['type' => 'text', 'text' => self::sanitize($link, 200)],
+                ],
+            ],
+        ];
+
+        $result = WhatsAppCloudApi::send($to, [
+            'type' => 'template',
+            'template' => [
+                'name' => $template,
+                'language' => ['code' => $cfg['template_language']],
+                'components' => $components,
+            ],
+        ], 'session_chat', 'New message notify: ' . $template, 'template');
         $result['template'] = $template;
 
         return $result;

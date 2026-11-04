@@ -37,11 +37,15 @@ class MentorEarningsController extends Controller
         }
 
         $transactions = MentorEarning::where('mentor_id', $mentor->id)
+            ->with(['booking.mentee', 'booking.service'])
             ->latest()
             ->paginate(30);
 
         return response()->json([
-            'transactions' => $transactions->items(),
+            'platform_fee_percent' => \App\CentralLogics\MentorLogic::platformFeePercent(),
+            'transactions' => collect($transactions->items())
+                ->map(fn (MentorEarning $earning) => MentorEarningsLogic::formatTransaction($earning))
+                ->values(),
             'total' => $transactions->total(),
         ]);
     }
@@ -67,11 +71,18 @@ class MentorEarningsController extends Controller
             return response()->json(['errors' => [['message' => 'Insufficient balance']]], 403);
         }
 
+        $mentor->loadMissing('settings');
         $settings = $mentor->settings;
+        $payoutDetails = json_decode($settings?->payout_details ?? '{}', true) ?: [];
+        $upiId = trim((string) ($payoutDetails['upi_id'] ?? ''));
+        if ($upiId === '') {
+            return response()->json(['errors' => [['message' => 'Add your UPI ID before requesting a payout']]], 403);
+        }
+
         $payout = MentorPayout::create([
             'mentor_id' => $mentor->id,
             'amount' => $request->amount,
-            'method' => $request->method ?? 'bank_transfer',
+            'method' => $request->method ?? 'upi',
             'bank_details' => $settings?->payout_details,
             'status' => 'pending',
         ]);

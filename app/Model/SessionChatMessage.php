@@ -18,6 +18,10 @@ class SessionChatMessage extends Model
         'mentor_booking_id',
         'sender_role',
         'body',
+        'attachment_path',
+        'attachment_original_name',
+        'attachment_mime',
+        'attachment_size',
     ];
 
     public function mentee(): BelongsTo

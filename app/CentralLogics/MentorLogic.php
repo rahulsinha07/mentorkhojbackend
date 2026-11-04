@@ -63,7 +63,7 @@ class MentorLogic
     /** @return array<string, string> */
     public static function normalizeSocialLinks(?array $links): array
     {
-        $allowed = ['instagram', 'facebook', 'linkedin', 'youtube', 'whatsapp', 'linktree', 'website'];
+        $allowed = ['instagram', 'facebook', 'linkedin', 'youtube', 'whatsapp', 'linktree', 'website', 'threads'];
         $out = [];
         foreach ($allowed as $key) {
             $url = trim((string) ($links[$key] ?? ''));
@@ -105,6 +105,7 @@ class MentorLogic
             'social_links' => $mentor->social_links_array,
             'rating' => self::ratingSummary($mentor),
             'active_reviews' => self::reviewsPreview($mentor),
+            'hide_default_reviews' => (bool) ($mentor->settings->hide_default_reviews ?? false),
             'services' => $services->map(fn ($s) => self::formatService($s))->values()->all(),
         ];
     }

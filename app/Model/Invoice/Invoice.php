@@ -120,6 +120,14 @@ class Invoice extends Model
 
     public function isEditable(): bool
     {
-        return in_array($this->status, ['draft', 'generated', 'pending', 'partially_paid'], true);
+        if ($this->status === 'cancelled' || $this->payment_status === 'cancelled') {
+            return false;
+        }
+
+        if ($this->payment_status === 'refunded') {
+            return false;
+        }
+
+        return true;
     }
 }

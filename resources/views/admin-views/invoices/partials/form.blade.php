@@ -20,10 +20,14 @@
     }
     $demoBooking = $prefill['demo_booking'] ?? null;
     $prefillMentors = $prefill['mentors'] ?? ($prefill['mentor_snapshot'] ?? []);
+    $mentorSnapshot = $isEdit && !empty($invoice->mentor_snapshot)
+        ? $invoice->mentor_snapshot
+        : (is_array($prefillMentors) ? $prefillMentors : []);
+    $customerAadhaarDigits = preg_replace('/\D/', '', (string) old('customer_aadhaar', $isEdit ? ($invoice->customer_aadhaar ?? '') : ($prefill['customer_aadhaar'] ?? '')));
     $mentors = $mentors ?? \App\Model\Mentor\Mentor::query()
         ->with(['enabledServices' => fn ($q) => $q->limit(1)])
         ->orderBy('display_name')
-        ->get(['id', 'display_name', 'username', 'headline'])
+        ->get(['id', 'display_name', 'username', 'headline', 'aadhaar'])
         ->map(function ($mentor) {
             $service = $mentor->enabledServices->first();
 
@@ -31,6 +35,7 @@
                 'id' => $mentor->id,
                 'display_name' => $mentor->display_name,
                 'username' => $mentor->username,
+                'aadhaar' => $mentor->aadhaar,
                 'default_price' => $service ? (float) $service->price : 0,
                 'service_title' => $service->title ?? null,
             ];
@@ -49,6 +54,7 @@
             'username' => $m->username,
             'default_price' => (float) ($m->default_price ?? 0),
             'service_title' => $m->service_title ?? null,
+            'aadhaar' => $m->aadhaar ?? null,
         ];
     })->values();
 @endphp
@@ -159,7 +165,18 @@
                         <div class="col-md-3 form-group"><label>{{ translate('PIN/ZIP') }}</label><input type="text" name="billing_postal_code" class="form-control" value="{{ old('billing_postal_code', $isEdit ? $invoice->billing_postal_code : ($prefill['billing_postal_code'] ?? '')) }}"></div>
                         <div class="col-md-6 form-group"><label>{{ translate('GSTIN') }}</label><input type="text" name="customer_gstin" class="form-control" value="{{ old('customer_gstin', $isEdit ? $invoice->customer_gstin : ($prefill['customer_gstin'] ?? '')) }}"></div>
                         <div class="col-md-6 form-group"><label>{{ translate('PAN') }}</label><input type="text" name="customer_pan" class="form-control" value="{{ old('customer_pan', $isEdit ? $invoice->customer_pan : ($prefill['customer_pan'] ?? '')) }}"></div>
-                        <div class="col-md-6 form-group"><label>{{ translate('Aadhaar Number') }}</label><input type="text" name="customer_aadhaar" id="customer_aadhaar" class="form-control" maxlength="12" pattern="\d{12}" placeholder="12-digit Aadhaar" value="{{ old('customer_aadhaar', $isEdit ? $invoice->customer_aadhaar : ($prefill['customer_aadhaar'] ?? '')) }}"></div>
+                        <div class="col-md-6 form-group">
+                            <label>{{ translate('Aadhaar Number') }}</label>
+                            <input type="hidden" name="customer_aadhaar" id="customer_aadhaar" value="{{ $customerAadhaarDigits }}">
+                            <input type="text"
+                                   id="customer_aadhaar_display"
+                                   class="form-control item-aadhaar-display"
+                                   maxlength="14"
+                                   placeholder="XXXX XXXX 1234"
+                                   autocomplete="off"
+                                   inputmode="numeric">
+                            <small class="text-muted">{{ translate('Only last 4 digits shown when not editing') }}</small>
+                        </div>
                         <div class="col-md-6 form-group"><label>{{ translate('Number of Classes Booked') }}</label><input type="number" name="classes_booked" id="classes_booked" class="form-control" min="1" value="{{ old('classes_booked', $isEdit ? $invoice->classes_booked : ($prefill['classes_booked'] ?? '')) }}"></div>
                         <div class="col-12">
                             <div class="custom-control custom-checkbox mb-2">
@@ -191,7 +208,7 @@
                 <div class="card-body invoice-items-wrap p-3">
                     <div id="items-body" class="invoice-items-list">
                         @foreach($items as $i => $item)
-                            @include('admin-views.invoices.partials.item-row', ['index' => $i, 'item' => $item, 'mentors' => $mentors])
+                            @include('admin-views.invoices.partials.item-row', ['index' => $i, 'item' => $item, 'mentors' => $mentors, 'mentorSnapshot' => $mentorSnapshot])
                         @endforeach
                     </div>
                     <div class="pt-2 d-flex flex-wrap gap-2 align-items-center border-top mt-2">
@@ -305,5 +322,5 @@
         mentorkhojSiteUrl: @json($mentorSiteUrl),
     };
 </script>
-<script src="{{ asset('public/assets/admin/js/invoice-form.js') }}?v=12"></script>
+<script src="{{ asset('public/assets/admin/js/invoice-form.js') }}?v=14"></script>
 @endpush

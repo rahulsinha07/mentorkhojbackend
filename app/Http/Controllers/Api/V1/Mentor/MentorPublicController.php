@@ -17,7 +17,7 @@ class MentorPublicController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Mentor::published()->with('enabledServices');
+        $query = Mentor::published()->with(['enabledServices', 'settings']);
 
         if ($request->filled('search')) {
             $search = $request->search;

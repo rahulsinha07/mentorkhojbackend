@@ -74,4 +74,30 @@ class InvoicePrivacyLogic
             'aadhaar' => $aadhaar,
         ];
     }
+
+    /** @return list<array<string, mixed>> */
+    public static function mentorsDisplayForInvoice(?array $snapshot, bool $maskPii): array
+    {
+        if (empty($snapshot)) {
+            return [];
+        }
+
+        $display = [];
+        foreach ($snapshot as $mentor) {
+            if (!is_array($mentor)) {
+                continue;
+            }
+
+            $aadhaar = $mentor['aadhaar'] ?? null;
+            $display[] = [
+                'id' => $mentor['id'] ?? null,
+                'name' => $mentor['name'] ?? null,
+                'username' => $mentor['username'] ?? null,
+                'profile_url' => $mentor['profile_url'] ?? null,
+                'aadhaar' => $maskPii ? static::maskAadhaar($aadhaar) : $aadhaar,
+            ];
+        }
+
+        return $display;
+    }
 }

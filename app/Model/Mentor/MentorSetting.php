@@ -15,6 +15,11 @@ class MentorSetting extends Model
         'notification_prefs',
         'payout_details',
         'share_prefs',
+        'hide_default_reviews',
+    ];
+
+    protected $casts = [
+        'hide_default_reviews' => 'boolean',
     ];
 
     public function mentor(): BelongsTo

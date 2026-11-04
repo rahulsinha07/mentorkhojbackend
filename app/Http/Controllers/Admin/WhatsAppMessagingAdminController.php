@@ -32,24 +32,66 @@ class WhatsAppMessagingAdminController extends Controller
         $activeWaId = WhatsAppCloudApi::normalizeWaId((string) $request->query('wa_id', ''));
         $tableReady = Schema::hasTable('whatsapp_messages');
         $windowOpen = false;
+        $stats = [
+            'total' => 0,
+            'inbound' => 0,
+            'outbound' => 0,
+            'conversations' => 0,
+        ];
 
         if ($tableReady) {
-            $threads = WhatsAppMessage::query()
-                ->selectRaw('wa_id, MAX(id) as last_id, MAX(occurred_at) as last_at, MAX(contact_name) as contact_name')
+            $stats['total'] = (int) WhatsAppMessage::query()->count();
+            $stats['inbound'] = (int) WhatsAppMessage::query()->where('direction', 'in')->count();
+            $stats['outbound'] = (int) WhatsAppMessage::query()->where('direction', 'out')->count();
+
+            $latestIds = WhatsAppMessage::query()
+                ->selectRaw('MAX(id) as id')
                 ->groupBy('wa_id')
-                ->orderByDesc('last_at')
-                ->orderByDesc('last_id')
-                ->limit(80)
+                ->pluck('id');
+
+            $threads = WhatsAppMessage::query()
+                ->whereIn('id', $latestIds)
+                ->orderByDesc('occurred_at')
+                ->orderByDesc('id')
+                ->limit(100)
                 ->get();
+
+            $stats['conversations'] = $threads->count();
+
+            if ($activeWaId === '' && $threads->isNotEmpty()) {
+                return redirect()->route('admin.whatsapp-messaging.edit', [
+                    'wa_id' => $threads->first()->wa_id,
+                ]);
+            }
 
             if ($activeWaId !== '') {
                 $messages = WhatsAppMessage::query()
                     ->where('wa_id', $activeWaId)
                     ->orderBy('occurred_at')
                     ->orderBy('id')
-                    ->limit(400)
+                    ->limit(500)
                     ->get();
                 $windowOpen = WhatsAppCloudApi::isCustomerWindowOpen($activeWaId);
+
+                // Prefer contact name from any inbound row if latest outbound has none.
+                $activeThread = $threads->firstWhere('wa_id', $activeWaId);
+                if (!$activeThread || empty($activeThread->contact_name)) {
+                    $named = WhatsAppMessage::query()
+                        ->where('wa_id', $activeWaId)
+                        ->whereNotNull('contact_name')
+                        ->where('contact_name', '!=', '')
+                        ->orderByDesc('id')
+                        ->value('contact_name');
+                    if ($named) {
+                        $threads = $threads->map(function ($t) use ($activeWaId, $named) {
+                            if ($t->wa_id === $activeWaId) {
+                                $t->contact_name = $named;
+                            }
+
+                            return $t;
+                        });
+                    }
+                }
             }
         }
 
@@ -61,6 +103,7 @@ class WhatsAppMessagingAdminController extends Controller
             'tech' => (string) ($cfg['templates']['tech'] ?? 'mentorkhoj_util_demo_tech'),
             'ai' => (string) ($cfg['templates']['ai'] ?? 'mentorkhoj_util_demo_ai'),
             'session_confirmed' => (string) ($cfg['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed'),
+            'session_scheduled' => (string) ($cfg['templates']['session_scheduled'] ?? 'mentorkhoj_util_session_scheduled'),
         ];
 
         return view('admin-views.whatsapp-messaging.edit', [
@@ -74,6 +117,99 @@ class WhatsAppMessagingAdminController extends Controller
             'templateOptions' => $templateOptions,
             'defaultSendMode' => $windowOpen ? 'text' : 'template',
             'defaultTemplateKey' => $windowOpen ? 'followup' : 'neet',
+            'stats' => $stats,
+            'pollUrl' => route('admin.whatsapp-messaging.poll'),
+        ]);
+    }
+
+    /**
+     * Lightweight JSON poll for live inbox updates.
+     */
+    public function poll(Request $request)
+    {
+        if (!Schema::hasTable('whatsapp_messages')) {
+            return response()->json(['ok' => false, 'messages' => [], 'threads' => []]);
+        }
+
+        $waId = WhatsAppCloudApi::normalizeWaId((string) $request->query('wa_id', ''));
+        $afterId = (int) $request->query('after_id', 0);
+
+        $latestIds = WhatsAppMessage::query()
+            ->selectRaw('MAX(id) as id')
+            ->groupBy('wa_id')
+            ->pluck('id');
+
+        $threads = WhatsAppMessage::query()
+            ->whereIn('id', $latestIds)
+            ->orderByDesc('occurred_at')
+            ->orderByDesc('id')
+            ->limit(100)
+            ->get()
+            ->map(static function (WhatsAppMessage $m) {
+                return [
+                    'wa_id' => $m->wa_id,
+                    'contact_name' => $m->contact_name,
+                    'body' => mb_substr((string) $m->body, 0, 120),
+                    'direction' => $m->direction,
+                    'occurred_at' => optional($m->occurred_at)->toIso8601String(),
+                    'occurred_label' => optional($m->occurred_at)->format('d M H:i'),
+                    'id' => $m->id,
+                ];
+            })
+            ->values();
+
+        $messages = [];
+        $windowOpen = false;
+        $maxId = $afterId;
+
+        if ($waId !== '') {
+            $query = WhatsAppMessage::query()
+                ->where('wa_id', $waId)
+                ->orderBy('occurred_at')
+                ->orderBy('id');
+
+            if ($afterId > 0) {
+                $query->where('id', '>', $afterId);
+            } else {
+                $query->limit(500);
+            }
+
+            $messages = $query->get()->map(static function (WhatsAppMessage $m) {
+                return [
+                    'id' => $m->id,
+                    'direction' => $m->direction,
+                    'body' => (string) $m->body,
+                    'type' => $m->type,
+                    'status' => $m->status,
+                    'source' => $m->source,
+                    'occurred_at' => optional($m->occurred_at)->toIso8601String(),
+                    'occurred_label' => optional($m->occurred_at)->format('d M Y H:i'),
+                ];
+            })->values();
+
+            if ($messages->isNotEmpty()) {
+                $maxId = (int) $messages->max('id');
+            } else {
+                $maxId = (int) WhatsAppMessage::query()->where('wa_id', $waId)->max('id');
+            }
+
+            $windowOpen = WhatsAppCloudApi::isCustomerWindowOpen($waId);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'wa_id' => $waId,
+            'after_id' => $afterId,
+            'max_id' => $maxId,
+            'window_open' => $windowOpen,
+            'messages' => $messages,
+            'threads' => $threads,
+            'stats' => [
+                'total' => (int) WhatsAppMessage::query()->count(),
+                'inbound' => (int) WhatsAppMessage::query()->where('direction', 'in')->count(),
+                'outbound' => (int) WhatsAppMessage::query()->where('direction', 'out')->count(),
+                'conversations' => $threads->count(),
+            ],
         ]);
     }
 
@@ -90,6 +226,7 @@ class WhatsAppMessagingAdminController extends Controller
             'param3' => 'nullable|string|max:500',
             'param4' => 'nullable|string|max:500',
             'param5' => 'nullable|string|max:500',
+            'param6' => 'nullable|string|max:500',
         ]);
 
         $waId = WhatsAppCloudApi::normalizeWaId($data['phone']);
@@ -134,6 +271,7 @@ class WhatsAppMessagingAdminController extends Controller
             'tech' => (string) ($cfg['templates']['tech'] ?? 'mentorkhoj_util_demo_tech'),
             'ai' => (string) ($cfg['templates']['ai'] ?? 'mentorkhoj_util_demo_ai'),
             'session_confirmed' => (string) ($cfg['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed'),
+            'session_scheduled' => (string) ($cfg['templates']['session_scheduled'] ?? 'mentorkhoj_util_session_scheduled'),
             'custom' => $customName,
         ];
 
@@ -150,6 +288,7 @@ class WhatsAppMessagingAdminController extends Controller
             trim((string) ($data['param3'] ?? '')),
             trim((string) ($data['param4'] ?? '')),
             trim((string) ($data['param5'] ?? '')),
+            trim((string) ($data['param6'] ?? '')),
         ], static fn ($v) => $v !== ''));
 
         // Follow-up / free-text style: one body variable = message box
@@ -184,6 +323,20 @@ class WhatsAppMessagingAdminController extends Controller
                     $params[1] ?? now()->format('d M Y'),
                     $params[2] ?? now()->format('h:i A'),
                     $params[3] ?? '+91 7366939888 / +91 9102695888',
+                ],
+                'admin'
+            );
+        } elseif ($key === 'session_scheduled') {
+            $result = WhatsAppCloudApi::sendTemplate(
+                $data['phone'],
+                $templateName,
+                [
+                    $params[0] ?? 'there',
+                    $params[1] ?? 'your session partner',
+                    $params[2] ?? now()->format('d M Y'),
+                    $params[3] ?? now()->format('h:i A'),
+                    $params[4] ?? 'will be shared shortly',
+                    $params[5] ?? url('/account/sessions'),
                 ],
                 'admin'
             );
@@ -248,6 +401,8 @@ class WhatsAppMessagingAdminController extends Controller
                 'ai' => trim((string) ($data['template_ai'] ?? 'mentorkhoj_util_demo_ai')) ?: 'mentorkhoj_util_demo_ai',
                 'session_confirmed' => trim((string) ($prev['templates']['session_confirmed'] ?? 'mentorkhoj_util_session_confirmed'))
                     ?: 'mentorkhoj_util_session_confirmed',
+                'session_scheduled' => trim((string) ($prev['templates']['session_scheduled'] ?? 'mentorkhoj_util_session_scheduled'))
+                    ?: 'mentorkhoj_util_session_scheduled',
                 'followup' => trim((string) ($data['template_followup'] ?? ($prev['templates']['followup'] ?? 'mentorkhoj_util_followup')))
                     ?: 'mentorkhoj_util_followup',
             ],
