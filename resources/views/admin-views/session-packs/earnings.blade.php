@@ -20,7 +20,7 @@
             <div class="col-md-3 col-sm-6 mb-3">
                 <div class="card h-100">
                     <div class="card-body">
-                        <small class="text-muted">{{ translate('Total Revenue (all time)') }}</small>
+                        <small class="text-muted">{{ translate('Total Revenue — funds collected (all time)') }}</small>
                         <h4 class="mb-0">{{ Helpers::set_symbol($totalRevenue) }}</h4>
                         <small class="text-muted">{{ translate('This month') }}: {{ Helpers::set_symbol($thisMonthRevenue) }}</small>
                     </div>
@@ -29,7 +29,7 @@
             <div class="col-md-3 col-sm-6 mb-3">
                 <div class="card h-100 border-primary">
                     <div class="card-body">
-                        <small class="text-muted">{{ translate('Mentor Coach Earning (platform fee)') }}</small>
+                        <small class="text-muted">{{ translate('Platform fee — on funds collected') }}</small>
                         <h4 class="mb-0 text-primary">{{ Helpers::set_symbol($platformEarning) }}</h4>
                         <small class="text-muted">{{ translate('This month') }}: {{ Helpers::set_symbol($thisMonthEarning) }}</small>
                     </div>
@@ -47,17 +47,19 @@
             <div class="col-md-3 col-sm-6 mb-3">
                 <div class="card h-100">
                     <div class="card-body">
-                        <small class="text-muted">{{ translate('Paid out to mentors') }}</small>
+                        <small class="text-muted">{{ translate('Paid out to mentors — delivered sessions only') }}</small>
                         <h4 class="mb-0">{{ Helpers::set_symbol($mentorPayout) }}</h4>
                     </div>
                 </div>
             </div>
         </div>
+        <p class="text-muted small mb-3">
+            {{ translate('Revenue and platform fee count the moment a pack\'s payment is confirmed — i.e. funds already collected — whether or not its sessions have been delivered yet. "Paid out to mentors" only counts sessions actually delivered, since a mentor can\'t be paid for undelivered work.') }}
+        </p>
 
         <div class="card mb-3">
             <div class="card-header border-0">
                 <h5 class="mb-0">{{ translate('Session packs — overall, till now') }}</h5>
-                <small class="text-muted">{{ translate('Money committed when a pack is assigned/paid — separate from earnings above, which only count completed sessions.') }}</small>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -69,7 +71,7 @@
                         <small class="text-muted d-block">{{ translate('Total packs (paid)') }}</small>
                         <h5 class="mb-0">{{ $totalPacksCount }}</h5>
                     </div>
-                    <div class="col-md-3 col-sm-6 mb-3">
+                    <div class="col-md-2 col-sm-6 mb-3">
                         <small class="text-muted d-block">{{ translate('Total amount added') }}</small>
                         <h5 class="mb-0">{{ Helpers::set_symbol($totalAmountAdded) }}</h5>
                     </div>
@@ -77,9 +79,13 @@
                         <small class="text-muted d-block">{{ translate('Sessions added') }}</small>
                         <h5 class="mb-0">{{ $totalSessionsAdded }}</h5>
                     </div>
-                    <div class="col-md-3 col-sm-6 mb-3">
+                    <div class="col-md-2 col-sm-6 mb-3">
                         <small class="text-muted d-block">{{ translate('Sessions completed') }}</small>
-                        <h5 class="mb-0">{{ $totalSessionsCompleted }} / {{ $totalSessionsAdded }}</h5>
+                        <h5 class="mb-0 text-success">{{ $totalSessionsCompleted }}</h5>
+                    </div>
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <small class="text-muted d-block">{{ translate('Sessions pending') }}</small>
+                        <h5 class="mb-0 text-warning">{{ $totalSessionsPending }}</h5>
                     </div>
                 </div>
             </div>
@@ -103,17 +109,21 @@
                     <thead class="thead-light">
                     <tr>
                         <th>{{ translate('Month') }}</th>
-                        <th class="text-right">{{ translate('Sessions completed') }}</th>
+                        <th class="text-right">{{ translate('Sessions added') }}</th>
+                        <th class="text-right">{{ translate('Completed') }}</th>
+                        <th class="text-right">{{ translate('Pending') }}</th>
                         <th class="text-right">{{ translate('Revenue') }}</th>
                         <th class="text-right">{{ translate('Platform fee') }}</th>
-                        <th class="text-right">{{ translate('Mentor payout') }}</th>
+                        <th class="text-right">{{ translate('Mentor share') }}</th>
                     </tr>
                     </thead>
                     <tbody>
                     @foreach(array_reverse($monthlyBreakdown) as $row)
                         <tr @if($row['label'] === now()->format('M Y')) class="table-active" @endif>
                             <td>{{ $row['label'] }}</td>
-                            <td class="text-right">{{ $row['sessions'] }}</td>
+                            <td class="text-right">{{ $row['sessions_added'] }}</td>
+                            <td class="text-right">{{ $row['sessions_completed'] }}</td>
+                            <td class="text-right">{{ $row['sessions_pending'] }}</td>
                             <td class="text-right">{{ Helpers::set_symbol($row['revenue']) }}</td>
                             <td class="text-right">{{ Helpers::set_symbol($row['fee']) }}</td>
                             <td class="text-right">{{ Helpers::set_symbol($row['net']) }}</td>

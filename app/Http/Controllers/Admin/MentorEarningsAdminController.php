@@ -16,40 +16,89 @@ class MentorEarningsAdminController extends Controller
     {
         $gstRate = (float) (InvoiceSetting::instance()->default_tax_rate ?? 18);
 
-        $totals = MentorEarning::query()
-            ->selectRaw('COALESCE(SUM(gross), 0) as gross, COALESCE(SUM(fee), 0) as fee, COALESCE(SUM(net), 0) as net')
+        // --- "Paid out to mentors" stays strictly realized/completion-based:
+        // a mentor can only actually be paid for sessions already delivered,
+        // regardless of how much of their pack's funds have been collected.
+        $realizedTotals = MentorEarning::query()
+            ->selectRaw('COALESCE(SUM(net), 0) as net')
             ->first();
+        $mentorPayout = round((float) $realizedTotals->net, 2);
 
-        $totalRevenue = round((float) $totals->gross, 2);
-        $platformEarning = round((float) $totals->fee, 2);
-        $mentorPayout = round((float) $totals->net, 2);
+        // --- Revenue / platform fee are cash-basis: money is "revenue" the
+        // moment it's collected, not only once a session is delivered.
+        // Direct (non-pack) bookings already work this way today — their
+        // MentorEarning row is created at payment time (see
+        // MentorBookingLogic::createBooking/syncFromLegacyOrder). Session
+        // packs used to only count revenue per completed session
+        // (consumeOnComplete), which under-reported collected funds — fold
+        // in the full pack amount the moment its payment is confirmed
+        // instead, consistent with how direct bookings are already treated.
+        $directEarnings = MentorEarning::query()
+            ->whereHas('booking', fn ($q) => $q->whereNull('session_credit_id'))
+            ->get(['gross', 'fee', 'net', 'created_at']);
+
+        $paidPacks = MentorSessionCredit::query()
+            ->where('payment_status', 'paid')
+            ->get(['id', 'fund_total', 'credits_total', 'credits_used', 'platform_fee_percent', 'last_granted_at', 'created_at']);
+
+        $totalRevenue = 0.0;
+        $platformEarning = 0.0;
+        foreach ($directEarnings as $row) {
+            $totalRevenue += (float) $row->gross;
+            $platformEarning += (float) $row->fee;
+        }
+        foreach ($paidPacks as $credit) {
+            $fee = round((float) $credit->fund_total * $credit->effectiveFeePercent() / 100, 2);
+            $totalRevenue += (float) $credit->fund_total;
+            $platformEarning += $fee;
+        }
+        $totalRevenue = round($totalRevenue, 2);
+        $platformEarning = round($platformEarning, 2);
         // GST is charged on top of the session price paid by the student, not on the platform's commission.
         $gstOnEarning = round($totalRevenue * ($gstRate / 100), 2);
 
-        // "Funded" figures — money committed when a pack is purchased/assigned
-        // (payment confirmed), independent of whether its sessions have been
-        // completed yet. Distinct from the MentorEarning totals above, which
-        // only realize once each individual session is marked complete.
-        $packTotals = MentorSessionCredit::query()
-            ->where('payment_status', 'paid')
-            ->selectRaw('COUNT(*) as packs_count, COALESCE(SUM(fund_total), 0) as total_funded, COALESCE(SUM(credits_total), 0) as sessions_added, COALESCE(SUM(credits_used), 0) as sessions_completed')
-            ->first();
-        $activePacksCount = (int) MentorSessionCredit::query()
-            ->where('payment_status', 'paid')
-            ->whereColumn('credits_used', '<', 'credits_total')
-            ->count();
-        $totalPacksCount = (int) $packTotals->packs_count;
-        $totalAmountAdded = round((float) $packTotals->total_funded, 2);
-        $totalSessionsAdded = (int) $packTotals->sessions_added;
-        $totalSessionsCompleted = (int) $packTotals->sessions_completed;
+        $activePacksCount = $paidPacks->filter(fn ($c) => (int) $c->credits_used < (int) $c->credits_total)->count();
+        $totalPacksCount = $paidPacks->count();
+        $totalAmountAdded = round((float) $paidPacks->sum('fund_total'), 2);
+        $totalSessionsAdded = (int) $paidPacks->sum('credits_total');
+        $totalSessionsCompleted = (int) $paidPacks->sum('credits_used');
+        $totalSessionsPending = max(0, $totalSessionsAdded - $totalSessionsCompleted);
 
-        $monthRows = MentorEarning::query()
-            ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as ym, COUNT(*) as sessions, COALESCE(SUM(gross), 0) as gross, COALESCE(SUM(fee), 0) as fee, COALESCE(SUM(net), 0) as net")
-            ->where('created_at', '>=', now()->subMonths(11)->startOfMonth())
-            ->groupBy('ym')
-            ->orderBy('ym')
-            ->get()
-            ->keyBy('ym');
+        // --- Monthly breakdown: bucket revenue by when it was actually
+        // collected — a direct booking's payment month, or a pack's most
+        // recent grant/top-up month — not by session-completion month.
+        $buckets = [];
+        $ensureBucket = function (string $ym) use (&$buckets) {
+            if (!isset($buckets[$ym])) {
+                $buckets[$ym] = [
+                    'sessions_added' => 0,
+                    'sessions_completed' => 0,
+                    'revenue' => 0.0,
+                    'fee' => 0.0,
+                    'net' => 0.0,
+                ];
+            }
+        };
+        foreach ($directEarnings as $row) {
+            $ym = $row->created_at->format('Y-m');
+            $ensureBucket($ym);
+            $buckets[$ym]['sessions_added'] += 1;
+            $buckets[$ym]['sessions_completed'] += 1;
+            $buckets[$ym]['revenue'] += (float) $row->gross;
+            $buckets[$ym]['fee'] += (float) $row->fee;
+            $buckets[$ym]['net'] += (float) $row->net;
+        }
+        foreach ($paidPacks as $credit) {
+            $when = $credit->last_granted_at ?? $credit->created_at;
+            $ym = $when->format('Y-m');
+            $ensureBucket($ym);
+            $fee = round((float) $credit->fund_total * $credit->effectiveFeePercent() / 100, 2);
+            $buckets[$ym]['sessions_added'] += (int) $credit->credits_total;
+            $buckets[$ym]['sessions_completed'] += (int) $credit->credits_used;
+            $buckets[$ym]['revenue'] += (float) $credit->fund_total;
+            $buckets[$ym]['fee'] += $fee;
+            $buckets[$ym]['net'] += ((float) $credit->fund_total - $fee);
+        }
 
         $months = [];
         $revenueSeries = [];
@@ -59,19 +108,22 @@ class MentorEarningsAdminController extends Controller
         for ($i = 11; $i >= 0; $i--) {
             $date = now()->subMonths($i);
             $key = $date->format('Y-m');
-            $row = $monthRows->get($key);
+            $row = $buckets[$key] ?? null;
             $label = $date->format('M Y');
             $months[] = $label;
-            $revenue = $row ? round((float) $row->gross, 2) : 0;
-            $fee = $row ? round((float) $row->fee, 2) : 0;
-            $net = $row ? round((float) $row->net, 2) : 0;
-            $sessions = $row ? (int) $row->sessions : 0;
+            $revenue = $row ? round($row['revenue'], 2) : 0;
+            $fee = $row ? round($row['fee'], 2) : 0;
+            $net = $row ? round($row['net'], 2) : 0;
+            $added = $row ? (int) $row['sessions_added'] : 0;
+            $completed = $row ? (int) $row['sessions_completed'] : 0;
             $revenueSeries[] = $revenue;
             $earningSeries[] = $fee;
             $payoutSeries[] = $net;
             $monthlyBreakdown[] = [
                 'label' => $label,
-                'sessions' => $sessions,
+                'sessions_added' => $added,
+                'sessions_completed' => $completed,
+                'sessions_pending' => max(0, $added - $completed),
                 'revenue' => $revenue,
                 'fee' => $fee,
                 'net' => $net,
@@ -79,11 +131,11 @@ class MentorEarningsAdminController extends Controller
         }
 
         $thisMonthKey = now()->format('Y-m');
-        $thisMonthRow = $monthRows->get($thisMonthKey);
-        $thisMonthRevenue = $thisMonthRow ? round((float) $thisMonthRow->gross, 2) : 0;
-        $thisMonthEarning = $thisMonthRow ? round((float) $thisMonthRow->fee, 2) : 0;
-        $thisMonthPayout = $thisMonthRow ? round((float) $thisMonthRow->net, 2) : 0;
-        $thisMonthSessions = $thisMonthRow ? (int) $thisMonthRow->sessions : 0;
+        $thisMonthRow = $buckets[$thisMonthKey] ?? null;
+        $thisMonthRevenue = $thisMonthRow ? round($thisMonthRow['revenue'], 2) : 0;
+        $thisMonthEarning = $thisMonthRow ? round($thisMonthRow['fee'], 2) : 0;
+        $thisMonthPayout = $thisMonthRow ? round($thisMonthRow['net'], 2) : 0;
+        $thisMonthSessions = $thisMonthRow ? (int) $thisMonthRow['sessions_added'] : 0;
         $thisMonthGst = round($thisMonthRevenue * ($gstRate / 100), 2);
 
         return view('admin-views.session-packs.earnings', compact(
@@ -106,7 +158,8 @@ class MentorEarningsAdminController extends Controller
             'totalPacksCount',
             'totalAmountAdded',
             'totalSessionsAdded',
-            'totalSessionsCompleted'
+            'totalSessionsCompleted',
+            'totalSessionsPending'
         ));
     }
 }
