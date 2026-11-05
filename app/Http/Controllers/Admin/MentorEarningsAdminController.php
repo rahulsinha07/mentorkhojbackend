@@ -38,27 +38,53 @@ class MentorEarningsAdminController extends Controller
                 $q->where('type', 'document')
                     ->orWhereHas('booking', fn ($q2) => $q2->whereNull('session_credit_id'));
             })
-            ->get(['gross', 'fee', 'net', 'created_at']);
+            ->with(['booking:id,tax_amount', 'documentPurchase:id,tax_amount'])
+            ->get(['gross', 'fee', 'net', 'created_at', 'mentor_booking_id', 'mentor_document_purchase_id']);
 
         $paidPacks = MentorSessionCredit::query()
             ->where('payment_status', 'paid')
             ->get(['id', 'fund_total', 'credits_total', 'credits_used', 'platform_fee_percent', 'last_granted_at', 'created_at']);
 
+        // GST is collected on top of the mentor's session price and is never
+        // split between mentor/platform — it's a pass-through tax, so it's
+        // tracked separately (gross/fee/net above never include it) and then
+        // added into "Total Revenue" as the extra cash actually collected.
+        //
+        // Direct bookings/document purchases already have a real tax_amount
+        // captured at checkout (the GST the student actually paid). Session
+        // packs have no such field — the admin enters only the mentor's base
+        // price when granting one, so GST is computed here at the
+        // admin-configured invoice rate and added on top, matching exactly
+        // how a website checkout adds GST on top of a mentor's set price.
+        $directTaxOf = function ($row): float {
+            if ($row->mentor_booking_id && $row->booking) {
+                return (float) ($row->booking->tax_amount ?? 0);
+            }
+            if ($row->mentor_document_purchase_id && $row->documentPurchase) {
+                return (float) ($row->documentPurchase->tax_amount ?? 0);
+            }
+            return 0.0;
+        };
+
         $totalRevenue = 0.0;
         $platformEarning = 0.0;
+        $gstCollected = 0.0;
         foreach ($directEarnings as $row) {
-            $totalRevenue += (float) $row->gross;
+            $tax = $directTaxOf($row);
+            $totalRevenue += (float) $row->gross + $tax;
             $platformEarning += (float) $row->fee;
+            $gstCollected += $tax;
         }
         foreach ($paidPacks as $credit) {
             $fee = round((float) $credit->fund_total * $credit->effectiveFeePercent() / 100, 2);
-            $totalRevenue += (float) $credit->fund_total;
+            $packGst = round((float) $credit->fund_total * ($gstRate / 100), 2);
+            $totalRevenue += (float) $credit->fund_total + $packGst;
             $platformEarning += $fee;
+            $gstCollected += $packGst;
         }
         $totalRevenue = round($totalRevenue, 2);
         $platformEarning = round($platformEarning, 2);
-        // GST is charged on top of the session price paid by the student, not on the platform's commission.
-        $gstOnEarning = round($totalRevenue * ($gstRate / 100), 2);
+        $gstOnEarning = round($gstCollected, 2);
 
         $activePacksCount = $paidPacks->filter(fn ($c) => (int) $c->credits_used < (int) $c->credits_total)->count();
         $totalPacksCount = $paidPacks->count();
@@ -79,28 +105,33 @@ class MentorEarningsAdminController extends Controller
                     'revenue' => 0.0,
                     'fee' => 0.0,
                     'net' => 0.0,
+                    'gst' => 0.0,
                 ];
             }
         };
         foreach ($directEarnings as $row) {
             $ym = $row->created_at->format('Y-m');
             $ensureBucket($ym);
+            $tax = $directTaxOf($row);
             $buckets[$ym]['sessions_added'] += 1;
             $buckets[$ym]['sessions_completed'] += 1;
-            $buckets[$ym]['revenue'] += (float) $row->gross;
+            $buckets[$ym]['revenue'] += (float) $row->gross + $tax;
             $buckets[$ym]['fee'] += (float) $row->fee;
             $buckets[$ym]['net'] += (float) $row->net;
+            $buckets[$ym]['gst'] += $tax;
         }
         foreach ($paidPacks as $credit) {
             $when = $credit->last_granted_at ?? $credit->created_at;
             $ym = $when->format('Y-m');
             $ensureBucket($ym);
             $fee = round((float) $credit->fund_total * $credit->effectiveFeePercent() / 100, 2);
+            $packGst = round((float) $credit->fund_total * ($gstRate / 100), 2);
             $buckets[$ym]['sessions_added'] += (int) $credit->credits_total;
             $buckets[$ym]['sessions_completed'] += (int) $credit->credits_used;
-            $buckets[$ym]['revenue'] += (float) $credit->fund_total;
+            $buckets[$ym]['revenue'] += (float) $credit->fund_total + $packGst;
             $buckets[$ym]['fee'] += $fee;
             $buckets[$ym]['net'] += ((float) $credit->fund_total - $fee);
+            $buckets[$ym]['gst'] += $packGst;
         }
 
         $months = [];
@@ -139,7 +170,7 @@ class MentorEarningsAdminController extends Controller
         $thisMonthEarning = $thisMonthRow ? round($thisMonthRow['fee'], 2) : 0;
         $thisMonthPayout = $thisMonthRow ? round($thisMonthRow['net'], 2) : 0;
         $thisMonthSessions = $thisMonthRow ? (int) $thisMonthRow['sessions_added'] : 0;
-        $thisMonthGst = round($thisMonthRevenue * ($gstRate / 100), 2);
+        $thisMonthGst = $thisMonthRow ? round($thisMonthRow['gst'], 2) : 0;
 
         return view('admin-views.session-packs.earnings', compact(
             'gstRate',

@@ -20,7 +20,7 @@
             <div class="col-md-3 col-sm-6 mb-3">
                 <div class="card h-100">
                     <div class="card-body">
-                        <small class="text-muted">{{ translate('Total Revenue — funds collected (all time)') }}</small>
+                        <small class="text-muted">{{ translate('Total Revenue — funds collected, incl. GST (all time)') }}</small>
                         <h4 class="mb-0">{{ Helpers::set_symbol($totalRevenue) }}</h4>
                         <small class="text-muted">{{ translate('This month') }}: {{ Helpers::set_symbol($thisMonthRevenue) }}</small>
                     </div>
@@ -29,7 +29,7 @@
             <div class="col-md-3 col-sm-6 mb-3">
                 <div class="card h-100 border-primary">
                     <div class="card-body">
-                        <small class="text-muted">{{ translate('Platform fee — on funds collected') }}</small>
+                        <small class="text-muted">{{ translate('Platform fee — on session price, excl. GST') }}</small>
                         <h4 class="mb-0 text-primary">{{ Helpers::set_symbol($platformEarning) }}</h4>
                         <small class="text-muted">{{ translate('This month') }}: {{ Helpers::set_symbol($thisMonthEarning) }}</small>
                     </div>
@@ -38,7 +38,7 @@
             <div class="col-md-3 col-sm-6 mb-3">
                 <div class="card h-100">
                     <div class="card-body">
-                        <small class="text-muted">{{ translate('GST on session price') }} ({{ rtrim(rtrim(number_format($gstRate, 2), '0'), '.') }}%)</small>
+                        <small class="text-muted">{{ translate('GST collected — included in Revenue above') }} ({{ rtrim(rtrim(number_format($gstRate, 2), '0'), '.') }}%)</small>
                         <h4 class="mb-0">{{ Helpers::set_symbol($gstOnEarning) }}</h4>
                         <small class="text-muted">{{ translate('This month') }}: {{ Helpers::set_symbol($thisMonthGst) }}</small>
                     </div>
@@ -54,7 +54,7 @@
             </div>
         </div>
         <p class="text-muted small mb-3">
-            {{ translate('Revenue and platform fee count the moment a pack\'s payment is confirmed — i.e. funds already collected — whether or not its sessions have been delivered yet. "Paid out to mentors" only counts sessions actually delivered, since a mentor can\'t be paid for undelivered work.') }}
+            {{ translate('Revenue and platform fee count the moment a pack\'s payment is confirmed — i.e. funds already collected — whether or not its sessions have been delivered yet. Total Revenue includes GST collected on top of the session price (actual cash in); for a manually-added session pack, the amount entered is the mentor\'s session price, and GST is computed on top of it here. Platform fee is taken only on the session price, never on GST, so GST never reduces what the mentor earns. "Paid out to mentors" only counts sessions actually delivered, since a mentor can\'t be paid for undelivered work.') }}
         </p>
 
         <div class="card mb-3">
