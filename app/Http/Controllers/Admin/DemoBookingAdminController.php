@@ -9,6 +9,9 @@ use App\Services\DemoBookingMailService;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Response;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -49,6 +52,9 @@ class DemoBookingAdminController extends Controller
 
         if ($request->query('export') === 'csv') {
             return $this->exportCsv(clone $query, $vertical ?: 'all');
+        }
+        if ($request->query('export') === 'xlsx') {
+            return $this->exportExcel();
         }
 
         $counts = $this->verticalCounts();
@@ -314,5 +320,126 @@ class DemoBookingAdminController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv',
         ]);
+    }
+
+    /**
+     * Full demo-leads workbook for the calling team: one "All leads" sheet
+     * plus one sheet per vertical (NEET/JEE/Tech/AI/Other), each with every
+     * lead's contact details and a green row highlight for anyone who has
+     * already converted (status=converted, or any assigned mentor has
+     * confirmed a paid session) — so callers can see at a glance who still
+     * needs a follow-up call vs. who's already a paying student.
+     */
+    protected function exportExcel(): StreamedResponse
+    {
+        $headers = [
+            'ID', 'Booking Ref', 'Created At', 'Name', 'Phone', 'Email',
+            'Category', 'Category Label', 'Vertical', 'Stage', 'Subjects',
+            'Status', 'Converted', 'Assigned Mentor(s)', 'Source',
+            'UTM Source', 'UTM Medium', 'UTM Campaign',
+            'Admin Notes', 'Last Communication At',
+        ];
+
+        $rowsByVertical = ['neet' => [], 'jee' => [], 'tech' => [], 'ai' => [], 'other' => []];
+        $allRows = [];
+
+        DemoBooking::query()
+            ->with('assignedMentors')
+            ->orderByDesc('created_at')
+            ->chunk(200, function ($bookings) use (&$rowsByVertical, &$allRows) {
+                foreach ($bookings as $b) {
+                    $converted = $b->status === 'converted'
+                        || $b->assignedMentors->contains(fn ($m) => (bool) ($m->pivot->paid_session_done ?? false));
+
+                    $row = [
+                        $b->id,
+                        $b->booking_ref,
+                        (string) $b->created_at,
+                        $b->name,
+                        $b->phone,
+                        $b->email,
+                        $b->category,
+                        $b->category_label,
+                        $b->vertical,
+                        $b->stage,
+                        is_array($b->subjects) ? implode('; ', $b->subjects) : $b->subjects,
+                        $b->status,
+                        $converted ? 'Yes' : 'No',
+                        $b->assignedMentors->pluck('display_name')->filter()->implode(', '),
+                        $b->source,
+                        $b->utm_source,
+                        $b->utm_medium,
+                        $b->utm_campaign,
+                        $b->admin_notes,
+                        (string) $b->last_communication_at,
+                        '_converted' => $converted,
+                    ];
+
+                    $allRows[] = $row;
+                    $rowsByVertical[$this->detectVertical($b)][] = $row;
+                }
+            });
+
+        $spreadsheet = new Spreadsheet();
+        $spreadsheet->removeSheetByIndex(0);
+
+        $sheets = ['All leads' => $allRows] + array_combine(
+            array_map(fn ($k) => self::VERTICALS[$k] ?? 'Other', array_keys($rowsByVertical)),
+            array_values($rowsByVertical),
+        );
+
+        foreach ($sheets as $title => $rows) {
+            $this->writeDemoLeadsSheet($spreadsheet, $title, $headers, $rows);
+        }
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $filename = 'demo-leads-' . date('Y-m-d') . '.xlsx';
+
+        return new StreamedResponse(function () use ($spreadsheet) {
+            $writer = new Xlsx($spreadsheet);
+            $writer->save('php://output');
+        }, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    /** @param array<int, array<string, mixed>> $rows */
+    protected function writeDemoLeadsSheet(Spreadsheet $spreadsheet, string $title, array $headers, array $rows): void
+    {
+        $sheet = $spreadsheet->createSheet();
+        $safeTitle = str_replace(['\\', '/', '?', '*', '[', ']', ':'], '-', $title);
+        $sheet->setTitle(substr($safeTitle, 0, 31));
+
+        foreach ($headers as $col => $label) {
+            $sheet->setCellValueByColumnAndRow($col + 1, 1, $label);
+        }
+        $sheet->getStyle(1, 1, count($headers), 1)->getFont()->setBold(true);
+
+        $greenFill = [
+            'fillType' => Fill::FILL_SOLID,
+            'startColor' => ['rgb' => 'C6EFCE'],
+        ];
+
+        $r = 2;
+        foreach ($rows as $row) {
+            $converted = (bool) ($row['_converted'] ?? false);
+            unset($row['_converted']);
+            $col = 1;
+            foreach ($row as $value) {
+                $sheet->setCellValueByColumnAndRow($col, $r, $value);
+                $col++;
+            }
+            if ($converted) {
+                $sheet->getStyle(1, $r, count($headers), $r)->getFill()->applyFromArray($greenFill);
+            }
+            $r++;
+        }
+
+        foreach (range(1, count($headers)) as $col) {
+            $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        }
+        $sheet->freezePane('A2');
     }
 }

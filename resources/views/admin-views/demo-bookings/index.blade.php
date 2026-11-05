@@ -64,6 +64,11 @@
                            href="{{ route('admin.demo-bookings.index', array_filter(['vertical' => $filterVertical ?? null, 'status' => $filterStatus ?? null, 'q' => $q ?? null, 'export' => 'csv'])) }}">
                             Export CSV
                         </a>
+                        <a class="btn btn-success"
+                           href="{{ route('admin.demo-bookings.index', ['export' => 'xlsx']) }}"
+                           title="All leads, every vertical on its own sheet, converted students highlighted in green">
+                            Download Excel (all leads)
+                        </a>
                     </div>
                 </form>
                 @if(!empty($filterVertical) && isset($verticals[$filterVertical]))
