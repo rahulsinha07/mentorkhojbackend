@@ -32,6 +32,9 @@ class MentorBooking extends Model
         'schedule_notify_sent_at' => 'datetime',
         'session_reminder_24h_sent_at' => 'datetime',
         'session_reminder_1h_sent_at' => 'datetime',
+        'recording_duration_seconds' => 'integer',
+        'zoho_recording_fetch_attempts' => 'integer',
+        'translated_transcripts' => 'array',
     ];
 
     protected $fillable = [

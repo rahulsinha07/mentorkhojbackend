@@ -26,6 +26,7 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('mentorkhoj:send-session-reminders-24h')->hourly();
         $schedule->command('mentorkhoj:send-session-reminders-1h')->everyFiveMinutes();
+        $schedule->command('mentorkhoj:fetch-zoho-recordings')->hourly();
         $schedule->command('mentors:audit-legacy-products --published')->weekly();
     }
 

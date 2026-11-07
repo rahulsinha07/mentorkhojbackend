@@ -82,8 +82,14 @@
                     <li>{{ translate('Paste the Client ID and Client Secret from your Zoho API Console (Server-based Application) above and Save.') }}</li>
                     <li>{{ translate('Click Connect Zoho and approve access on the Zoho consent screen.') }}</li>
                     <li>{{ translate('A test meeting is created and deleted automatically to confirm the connection works. You can re-run this anytime with Test Connection.') }}</li>
-                    <li>{{ translate('Once connected, mentor sessions will get an auto-generated Zoho Meeting link when scheduled — this is wired in separately and is off until explicitly enabled.') }}</li>
+                    <li>{{ translate('Once connected, mentor sessions automatically get a Zoho Meeting link the moment they\'re scheduled. If Zoho is unreachable for a specific session (expired token, Zoho-side rate limit, etc.), the mentor sees the exact reason on that booking and can retry or add a link manually — scheduling itself is never blocked.') }}</li>
+                    <li>{{ translate('After a session ends, the recording, transcript and AI summary are fetched from Zoho automatically (checked hourly) and shown to both the mentor and student on the booking, with an option to translate the transcript into another language.') }}</li>
                 </ol>
+                @if($setting->isConnected())
+                    <div class="alert alert-info mt-3 mb-0 p-2" style="font-size: 13px;">
+                        {{ translate('Recording access was added on 9 Nov 2026. If this connection was made before that date, click Disconnect then Connect again so Zoho grants the new recording permission — otherwise recordings/transcripts will silently stay unavailable.') }}
+                    </div>
+                @endif
             </div>
         </div>
     </div>

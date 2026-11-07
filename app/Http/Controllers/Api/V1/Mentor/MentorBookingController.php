@@ -18,6 +18,7 @@ use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorBooking;
 use App\Model\Mentor\MentorService;
 use App\Model\Product;
+use App\Services\MeetingTranslationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -187,6 +188,59 @@ class MentorBookingController extends Controller
 
         return response()->json([
             'booking' => MentorBookingLogic::formatBooking($booking),
+        ]);
+    }
+
+    public function translateMyTranscript(Request $request, int $id, MeetingTranslationService $translator): JsonResponse
+    {
+        $booking = MentorBooking::where('mentee_user_id', $request->user()->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return $this->handleTranslateTranscript($request, $booking, $translator, false);
+    }
+
+    public function translateMentorTranscript(Request $request, int $id, MeetingTranslationService $translator): JsonResponse
+    {
+        $mentor = Mentor::where('user_id', $request->user()->id)->first();
+        if (!$mentor) {
+            return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
+        }
+
+        $booking = MentorBooking::where('mentor_id', $mentor->id)->find($id);
+        if (!$booking) {
+            return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
+        }
+
+        return $this->handleTranslateTranscript($request, $booking, $translator, true);
+    }
+
+    private function handleTranslateTranscript(Request $request, MentorBooking $booking, MeetingTranslationService $translator, bool $forMentor): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'language' => 'required|string|in:'.implode(',', array_keys(MeetingTranslationService::SUPPORTED_LANGUAGES)),
+        ]);
+        if ($validator->fails()) {
+            return response()->json(['errors' => Helpers::error_processor($validator)], 422);
+        }
+
+        if (empty($booking->transcript_text)) {
+            return response()->json(['errors' => [['message' => 'No transcript is available for this session yet.']]], 422);
+        }
+
+        if (!$translator->isConfigured()) {
+            return response()->json(['errors' => [['message' => 'Transcript translation is not set up yet. Please contact support.']]], 422);
+        }
+
+        $translated = $translator->translateTranscript($booking, (string) $request->input('language'));
+        if ($translated === null) {
+            return response()->json(['errors' => [['message' => 'Could not translate the transcript right now. Please try again shortly.']]], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'booking' => MentorBookingLogic::formatBooking($booking->fresh(['service', 'mentee', 'mentor', 'events']), $forMentor),
         ]);
     }
 

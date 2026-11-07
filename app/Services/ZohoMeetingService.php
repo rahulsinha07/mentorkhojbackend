@@ -24,7 +24,12 @@ class ZohoMeetingService
     private const MEETING_BASE = 'https://meeting.zoho.in/api/v2';
     // manageOrg.READ is needed to look up the account's zsoid (org id) and
     // zuid (user id), both required on every other Meeting API call.
-    private const SCOPE = 'ZohoMeeting.meeting.ALL,ZohoMeeting.manageOrg.READ';
+    // recording.READ is needed for fetchRecording() — added 2026-11-09. An
+    // account connected before this change holds a token without this scope
+    // and must be reconnected from System Settings > Zoho Meeting (click
+    // Disconnect, then Connect again) before recording lookups will work;
+    // refreshAccessTokenIfNeeded() cannot widen an existing token's scope.
+    private const SCOPE = 'ZohoMeeting.meeting.ALL,ZohoMeeting.manageOrg.READ,ZohoMeeting.recording.READ';
 
     public function isConfigured(): bool
     {
@@ -299,6 +304,115 @@ class ZohoMeetingService
             Log::error('Zoho deleteMeeting threw', ['meeting_id' => $zohoMeetingId, 'message' => $e->getMessage()]);
 
             return false;
+        }
+    }
+
+    /**
+     * Looks up the recording for a given meeting (matched by the Zoho
+     * meetingKey stored as MentorBooking::zoho_meeting_id), if one exists.
+     *
+     * Zoho's recordings.json is a flat, newest-first listing with no
+     * documented filter-by-meeting parameter, so this pages through it
+     * looking for a matching meetingKey. Safe to call repeatedly — never
+     * throws, returns null on any failure or "not found yet" (the meeting
+     * may not have happened, or Zoho may still be processing the recording).
+     *
+     * @return array{
+     *   play_url: string, download_url: ?string, duration_seconds: ?int,
+     *   transcript_text: ?string, transcript_language: ?string, summary_text: ?string
+     * }|null
+     */
+    public function fetchRecording(string $zohoMeetingId): ?array
+    {
+        $token = $this->refreshAccessTokenIfNeeded();
+        $setting = ZohoSetting::current();
+        if (!$token || $zohoMeetingId === '' || empty($setting->zoho_account_id)) {
+            return null;
+        }
+
+        // Zoho's docs don't publish a page/offset parameter, so we scan the
+        // pages the API gives us up to a sane cap rather than loop forever
+        // on an undocumented "moreRecords" flag.
+        $maxPages = 5;
+        $page = 1;
+
+        while ($page <= $maxPages) {
+            try {
+                $response = Http::withHeaders([
+                    'Authorization' => 'Zoho-oauthtoken '.$token,
+                ])->get(self::MEETING_BASE.'/'.$setting->zoho_account_id.'/recordings.json', [
+                    'page' => $page,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Zoho fetchRecording threw', ['meeting_id' => $zohoMeetingId, 'message' => $e->getMessage()]);
+
+                return null;
+            }
+
+            if (!$response->successful()) {
+                Log::error('Zoho fetchRecording failed', [
+                    'meeting_id' => $zohoMeetingId,
+                    'http' => $response->status(),
+                    'body' => mb_substr($response->body(), 0, 500),
+                ]);
+
+                return null;
+            }
+
+            $json = $response->json();
+            $recordings = (array) data_get($json, 'recordings', []);
+
+            foreach ($recordings as $recording) {
+                if ((string) data_get($recording, 'meetingKey') !== $zohoMeetingId) {
+                    continue;
+                }
+
+                $playUrl = (string) (data_get($recording, 'playUrl') ?: '');
+                if ($playUrl === '') {
+                    // Matched the meeting, but Zoho hasn't finished processing
+                    // the recording file yet (isGenerating) — try again later.
+                    return null;
+                }
+
+                return [
+                    'play_url' => $playUrl,
+                    'download_url' => data_get($recording, 'downloadUrl') ?: null,
+                    'duration_seconds' => is_numeric(data_get($recording, 'duration'))
+                        ? (int) round(((float) data_get($recording, 'duration')) / 1000)
+                        : null,
+                    'transcript_text' => data_get($recording, 'isTranscriptGenerated')
+                        ? $this->downloadTextArtifact((string) data_get($recording, 'transcriptionDownloadUrl', ''), $token)
+                        : null,
+                    'transcript_language' => data_get($recording, 'transcriptLanguage') ?: null,
+                    'summary_text' => data_get($recording, 'isSummaryGenerated')
+                        ? $this->downloadTextArtifact((string) data_get($recording, 'summaryDownloadUrl', ''), $token)
+                        : null,
+                ];
+            }
+
+            if (!data_get($json, 'meta.moreRecords')) {
+                break;
+            }
+            $page++;
+        }
+
+        return null;
+    }
+
+    private function downloadTextArtifact(string $url, string $token): ?string
+    {
+        if ($url === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::withHeaders(['Authorization' => 'Zoho-oauthtoken '.$token])->get($url);
+
+            return $response->successful() ? trim($response->body()) : null;
+        } catch (\Throwable $e) {
+            Log::error('Zoho downloadTextArtifact threw', ['url' => $url, 'message' => $e->getMessage()]);
+
+            return null;
         }
     }
 

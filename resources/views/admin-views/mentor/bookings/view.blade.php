@@ -65,6 +65,38 @@
                                     </div>
                                 @endif
                             </dd>
+                            <dt class="col-sm-4">{{ translate('Recording') }}</dt>
+                            <dd class="col-sm-8">
+                                @if($booking->recording_play_url)
+                                    <a href="{{ $booking->recording_play_url }}" target="_blank" rel="noopener">{{ translate('Watch recording') }}</a>
+                                    @if($booking->recording_download_url)
+                                        · <a href="{{ $booking->recording_download_url }}" target="_blank" rel="noopener">{{ translate('Download') }}</a>
+                                    @endif
+                                    @if($booking->recording_duration_seconds)
+                                        <br><small class="text-muted">{{ gmdate('i:s', $booking->recording_duration_seconds) }} min</small>
+                                    @endif
+                                    @if($booking->transcript_text)
+                                        <br><a data-toggle="collapse" href="#transcript-{{ $booking->id }}" role="button">{{ translate('View transcript') }}</a>
+                                        <div class="collapse mt-2" id="transcript-{{ $booking->id }}">
+                                            <div class="card card-body" style="max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 13px;">{{ $booking->transcript_text }}</div>
+                                        </div>
+                                    @endif
+                                    @if($booking->summary_text)
+                                        <br><a data-toggle="collapse" href="#summary-{{ $booking->id }}" role="button">{{ translate('View AI summary') }}</a>
+                                        <div class="collapse mt-2" id="summary-{{ $booking->id }}">
+                                            <div class="card card-body" style="white-space: pre-wrap; font-size: 13px;">{{ $booking->summary_text }}</div>
+                                        </div>
+                                    @endif
+                                @elseif($booking->zoho_meeting_id && $booking->meeting_link_source === 'zoho')
+                                    <span class="text-muted">
+                                        {{ $booking->zoho_recording_fetch_status === 'not_found'
+                                            ? translate('No recording found for this session.')
+                                            : translate('Not available yet — checked automatically after the session ends.') }}
+                                    </span>
+                                @else
+                                    <span class="text-muted">—</span>
+                                @endif
+                            </dd>
                             <dt class="col-sm-4">{{ translate('Note') }}</dt>
                             <dd class="col-sm-8">{{ $booking->mentee_note ?: '—' }}</dd>
                         </dl>

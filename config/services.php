@@ -30,4 +30,9 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'anthropic' => [
+        // Used by MeetingTranslationService to translate session transcripts.
+        'api_key' => env('ANTHROPIC_API_KEY'),
+    ],
+
 ];

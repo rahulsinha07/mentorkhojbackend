@@ -41,6 +41,7 @@ Route::group(['namespace' => 'Api\V1\Mentor'], function () {
             Route::patch('my/bookings/{id}/schedule', [MentorBookingController::class, 'updateMySchedule']);
             Route::post('my/bookings/{id}/schedule', [MentorBookingController::class, 'scheduleMyBooking']);
             Route::post('my/bookings/{id}/reschedule-request', [MentorBookingController::class, 'requestReschedule']);
+            Route::post('my/bookings/{id}/translate-transcript', [MentorBookingController::class, 'translateMyTranscript']);
             Route::patch('my/bookings/{id}/complete', [MentorBookingController::class, 'completeMyBooking']);
             Route::get('my/bookings', [MentorBookingController::class, 'myBookings']);
             Route::get('my/sessions', [MentorBookingController::class, 'mySessions']);
@@ -94,6 +95,7 @@ Route::group(['namespace' => 'Api\V1\Mentor'], function () {
         Route::patch('bookings/{id}/status', [MentorBookingController::class, 'updateStatus']);
         Route::patch('bookings/{id}/schedule', [MentorBookingController::class, 'updateSchedule']);
         Route::post('bookings/{id}/schedule', [MentorBookingController::class, 'scheduleMentorBooking']);
+        Route::post('bookings/{id}/translate-transcript', [MentorBookingController::class, 'translateMentorTranscript']);
         Route::post('bookings/{id}/reschedule-approve', [MentorBookingController::class, 'approveReschedule']);
         Route::post('bookings/{id}/reschedule-reject', [MentorBookingController::class, 'rejectReschedule']);
         Route::patch('bookings/{id}/complete', [MentorBookingController::class, 'completeMentorBooking']);
