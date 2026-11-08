@@ -53,13 +53,20 @@ class MentorEarningsLogic
         $pendingPayout = (float) MentorPayout::where('mentor_id', $mentor->id)
             ->where('status', 'pending')
             ->sum('amount');
+        // Sessions admin has directly marked paid (e.g. settled by bank
+        // transfer outside the app) — these must reduce available_balance
+        // too, otherwise a mentor could request a withdrawal for money
+        // they've already received. See SessionCreditLogic::toggleMentorPayout().
+        $directlySettled = (float) \App\Model\Mentor\MentorBooking::where('mentor_id', $mentor->id)
+            ->where('mentor_payout_status', 'paid')
+            ->sum('mentor_net');
 
         return [
             'gross' => round($gross, 2),
             'platform_fees' => round($fees, 2),
             'net' => round($net, 2),
-            'paid_out' => round($paidOut, 2),
-            'available_balance' => round(max(0, $net - $paidOut - $pendingPayout), 2),
+            'paid_out' => round($paidOut + $directlySettled, 2),
+            'available_balance' => round(max(0, $net - $paidOut - $pendingPayout - $directlySettled), 2),
             'pending_payout' => round($pendingPayout, 2),
             'platform_fee_percent' => MentorLogic::platformFeePercent(),
         ];
@@ -98,6 +105,10 @@ class MentorEarningsLogic
             'session_date' => $sessionDate,
             'description' => $label,
             'platform_fee_percent' => MentorLogic::platformFeePercent(),
+            // Null for document-purchase earnings (no booking) — payout_status
+            // is only tracked per MentorBooking today.
+            'payout_status' => $booking?->mentor_payout_status,
+            'paid_at' => $booking?->mentor_paid_at?->toIso8601String(),
             'created_at' => $earning->created_at?->toIso8601String(),
         ];
     }

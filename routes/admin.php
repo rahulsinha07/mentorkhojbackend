@@ -120,6 +120,7 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('/', [MentorSessionPackController::class, 'index'])->name('index');
             Route::get('{id}', [MentorSessionPackController::class, 'show'])->name('show');
             Route::post('bookings/{bookingId}/toggle-complete', [MentorSessionPackController::class, 'toggleComplete'])->name('toggle-complete');
+            Route::post('bookings/{bookingId}/toggle-mentor-payout', [MentorSessionPackController::class, 'toggleMentorPayout'])->name('toggle-mentor-payout');
             Route::post('{id}/toggle-payment', [MentorSessionPackController::class, 'togglePayment'])->name('toggle-payment');
         });
 
@@ -233,6 +234,7 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('bookings/{id}', [MentorBookingController::class, 'show'])->name('bookings.show');
             Route::post('bookings/{id}/send-payment-email', [MentorBookingController::class, 'sendPaymentReminder'])->name('bookings.send-payment-email');
             Route::post('bookings/{id}/complete', [MentorBookingController::class, 'complete'])->name('bookings.complete');
+            Route::post('bookings/{id}/toggle-mentor-payout', [MentorBookingController::class, 'toggleMentorPayout'])->name('bookings.toggle-mentor-payout');
             Route::post('bookings/{id}/reschedule', [MentorBookingController::class, 'reschedule'])->name('bookings.reschedule');
             Route::post('bookings/{id}/no-show', [MentorBookingController::class, 'markNoShowAdmin'])->name('bookings.no-show');
             Route::get('edit/{id}', [MentorController::class, 'edit'])->name('edit');

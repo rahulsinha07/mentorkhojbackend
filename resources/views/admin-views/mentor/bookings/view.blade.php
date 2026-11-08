@@ -120,6 +120,19 @@
                             <dd><span class="badge badge-soft-{{ $booking->payment_status === 'paid' ? 'success' : ($booking->payment_status === 'failed' ? 'danger' : 'warning') }}">{{ $booking->payment_status }}</span></dd>
                             <dt>{{ translate('Booking status') }}</dt>
                             <dd><span class="badge badge-soft-info">{{ $booking->status }}</span></dd>
+                            @if($booking->status === 'completed')
+                                <dt>{{ translate('Mentor payout') }}</dt>
+                                <dd>
+                                    @if($booking->mentor_payout_status === 'paid')
+                                        <span class="badge badge-soft-success">{{ translate('Paid') }}</span>
+                                        @if($booking->mentor_paid_at)
+                                            <small class="text-muted ml-1">{{ translate('on') }} {{ $booking->mentor_paid_at->format('d M Y') }}</small>
+                                        @endif
+                                    @else
+                                        <span class="badge badge-soft-warning">{{ translate('Pending') }}</span>
+                                    @endif
+                                </dd>
+                            @endif
                             <dt>{{ translate('Source') }}</dt>
                             <dd>
                                 <span class="badge badge-soft-{{ in_array($booking->booking_source ?? 'paid', ['session', 'credit'], true) ? 'primary' : 'secondary' }}">
@@ -140,6 +153,15 @@
                                 @csrf
                                 <button type="submit" class="btn btn-sm btn-success">
                                     <i class="tio-checkmark-circle"></i> {{ translate('Mark complete') }}
+                                </button>
+                            </form>
+                        @endif
+                        @if($booking->status === 'completed')
+                            <form method="post" action="{{ route('admin.mentor.bookings.toggle-mentor-payout', $booking->id) }}" class="mt-3"
+                                  onsubmit="return confirm('{{ $booking->mentor_payout_status === 'paid' ? translate('Mark this session\'s mentor payout as pending again?') : translate('Confirm the mentor has been paid for this session?') }}');">
+                                @csrf
+                                <button type="submit" class="btn btn-sm {{ $booking->mentor_payout_status === 'paid' ? 'btn-outline-warning' : 'btn-outline-success' }}">
+                                    {{ $booking->mentor_payout_status === 'paid' ? translate('Mark payout pending') : translate('Mark payout done') }}
                                 </button>
                             </form>
                         @endif

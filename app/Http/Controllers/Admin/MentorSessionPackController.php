@@ -81,6 +81,22 @@ class MentorSessionPackController extends Controller
         return back();
     }
 
+    public function toggleMentorPayout(int $bookingId): RedirectResponse
+    {
+        $booking = \App\Model\Mentor\MentorBooking::findOrFail($bookingId);
+
+        try {
+            $booking = SessionCreditLogic::toggleMentorPayout($booking, auth('admin')->id());
+            Toastr::success((string) $booking->mentor_payout_status === 'paid'
+                ? translate('Mentor payout marked as paid')
+                : translate('Mentor payout marked as pending'));
+        } catch (\Throwable $e) {
+            Toastr::error($e->getMessage());
+        }
+
+        return back();
+    }
+
     public function togglePayment(int $id): RedirectResponse
     {
         $credit = MentorSessionCredit::findOrFail($id);

@@ -418,6 +418,14 @@ class SessionCreditLogic
 
     public static function canUnmarkComplete(MentorBooking $booking): bool
     {
+        // Once the mentor has been marked paid for this session, reversing
+        // completion would silently delete the earning it was paid against
+        // with no reconciliation — block it instead. Admin must mark the
+        // payout pending again first if a correction is genuinely needed.
+        if ((string) $booking->mentor_payout_status === 'paid') {
+            return false;
+        }
+
         return (string) $booking->status === 'completed';
     }
 
@@ -427,6 +435,9 @@ class SessionCreditLogic
      */
     public static function unmarkComplete(MentorBooking $booking): MentorBooking
     {
+        if ((string) $booking->mentor_payout_status === 'paid') {
+            throw new \RuntimeException('This session\'s mentor payout is already marked paid — mark the payout pending again first if you need to reverse completion.');
+        }
         if (!self::canUnmarkComplete($booking)) {
             throw new \RuntimeException('Only a completed session can be marked incomplete.');
         }
@@ -568,6 +579,33 @@ class SessionCreditLogic
             }
             MentorEarningsLogic::creditBooking($booking);
         }
+    }
+
+    /**
+     * Admin-only: record that a specific completed session's mentor payout
+     * has (or hasn't) actually been settled. Independent of MentorPayout
+     * (the mentor's own lump-sum withdrawal requests) — this is admin
+     * directly confirming a session is paid, e.g. after a bank transfer
+     * made outside the app.
+     */
+    public static function toggleMentorPayout(MentorBooking $booking, ?int $adminId): MentorBooking
+    {
+        if ((string) $booking->status !== 'completed') {
+            throw new \RuntimeException('Only a completed session can have its payout marked.');
+        }
+
+        if ((string) $booking->mentor_payout_status === 'paid') {
+            $booking->mentor_payout_status = 'pending';
+            $booking->mentor_paid_at = null;
+            $booking->mentor_paid_by_admin_id = null;
+        } else {
+            $booking->mentor_payout_status = 'paid';
+            $booking->mentor_paid_at = now();
+            $booking->mentor_paid_by_admin_id = $adminId;
+        }
+        $booking->save();
+
+        return $booking->fresh();
     }
 
     public static function applyBucketFilter($query, ?string $bucket)

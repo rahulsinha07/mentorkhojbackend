@@ -8,6 +8,8 @@
         $total = (int) $credit->credits_total;
         $used = (int) $credit->credits_used;
         $pct = $total > 0 ? min(100, round(($used / $total) * 100)) : 0;
+        $completedBookings = $bookings->where('status', 'completed');
+        $paidOutCount = $completedBookings->where('mentor_payout_status', 'paid')->count();
     @endphp
     <div class="content container-fluid">
         <div class="page-header">
@@ -87,6 +89,15 @@
                 <div class="progress mt-1" style="height: 8px;">
                     <div class="progress-bar {{ $used < $total ? 'bg-primary' : 'bg-success' }}" style="width: {{ $pct }}%"></div>
                 </div>
+                @if($completedBookings->count() > 0)
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            {{ translate('Mentor payout') }}:
+                            <strong>{{ $paidOutCount }} {{ translate('of') }} {{ $completedBookings->count() }}</strong>
+                            {{ translate('completed sessions paid out') }}
+                        </small>
+                    </div>
+                @endif
             </div>
         </div>
 
@@ -102,6 +113,7 @@
                         <th>{{ translate('Date') }}</th>
                         <th>{{ translate('Service') }}</th>
                         <th class="text-center">{{ translate('Status') }}</th>
+                        <th class="text-center">{{ translate('Mentor payout') }}</th>
                         <th class="text-center">{{ translate('Action') }}</th>
                     </tr>
                     </thead>
@@ -124,7 +136,30 @@
                                 </span>
                             </td>
                             <td class="text-center">
-                                @if($booking->status === 'completed')
+                                @if($booking->status !== 'completed')
+                                    <span class="text-muted">—</span>
+                                @else
+                                    <div>
+                                        @if($booking->mentor_payout_status === 'paid')
+                                            <span class="badge badge-soft-success">{{ translate('Paid') }}</span>
+                                            @if($booking->mentor_paid_at)
+                                                <br><small class="text-muted">{{ $booking->mentor_paid_at->format('d M Y') }}</small>
+                                            @endif
+                                        @else
+                                            <span class="badge badge-soft-warning">{{ translate('Pending') }}</span>
+                                        @endif
+                                    </div>
+                                    <form method="post" action="{{ route('admin.session-packs.toggle-mentor-payout', $booking->id) }}" class="d-inline"
+                                          onsubmit="return confirm('{{ $booking->mentor_payout_status === 'paid' ? translate('Mark this session\'s mentor payout as pending again?') : translate('Confirm the mentor has been paid for this session?') }}');">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm {{ $booking->mentor_payout_status === 'paid' ? 'btn-outline-warning' : 'btn-outline-success' }} mt-1">
+                                            {{ $booking->mentor_payout_status === 'paid' ? translate('Mark pending') : translate('Mark payout done') }}
+                                        </button>
+                                    </form>
+                                @endif
+                            </td>
+                            <td class="text-center">
+                                @if($booking->status === 'completed' && \App\CentralLogics\SessionCreditLogic::canUnmarkComplete($booking))
                                     <form method="post" action="{{ route('admin.session-packs.toggle-complete', $booking->id) }}" class="d-inline"
                                           onsubmit="return confirm('{{ translate('Mark this session back as incomplete? This reverses the credit it consumed.') }}');">
                                         @csrf
@@ -132,6 +167,8 @@
                                             {{ translate('Mark incomplete') }}
                                         </button>
                                     </form>
+                                @elseif($booking->status === 'completed')
+                                    <span class="text-muted" title="{{ translate('Mentor already paid — mark payout pending first to reverse') }}">—</span>
                                 @elseif(\App\CentralLogics\SessionCreditLogic::canAdminMarkComplete($booking))
                                     <form method="post" action="{{ route('admin.session-packs.toggle-complete', $booking->id) }}" class="d-inline"
                                           onsubmit="return confirm('{{ translate('Mark this session complete?') }}');">
@@ -147,7 +184,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="text-center p-4 text-muted">
+                            <td colspan="6" class="text-center p-4 text-muted">
                                 {{ translate('No sessions scheduled yet for this pack') }}
                             </td>
                         </tr>

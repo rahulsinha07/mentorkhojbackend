@@ -35,6 +35,7 @@ class MentorBooking extends Model
         'recording_duration_seconds' => 'integer',
         'zoho_recording_fetch_attempts' => 'integer',
         'translated_transcripts' => 'array',
+        'mentor_paid_at' => 'datetime',
     ];
 
     protected $fillable = [
