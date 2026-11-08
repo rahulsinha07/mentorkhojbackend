@@ -90,6 +90,15 @@ class Mentor extends Model
         return $this->hasOne(MentorSetting::class);
     }
 
+    /** Saved UPI VPA for payouts (admin-views payout recording), or null if not set. */
+    public function upiId(): ?string
+    {
+        $details = json_decode($this->settings?->payout_details ?? '{}', true) ?: [];
+        $upi = trim((string) ($details['upi_id'] ?? ''));
+
+        return $upi !== '' ? $upi : null;
+    }
+
     public function shareLogs(): HasMany
     {
         return $this->hasMany(MentorShareLog::class);

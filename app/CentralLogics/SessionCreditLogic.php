@@ -588,8 +588,12 @@ class SessionCreditLogic
      * directly confirming a session is paid, e.g. after a bank transfer
      * made outside the app.
      */
-    public static function toggleMentorPayout(MentorBooking $booking, ?int $adminId): MentorBooking
-    {
+    public static function toggleMentorPayout(
+        MentorBooking $booking,
+        ?int $adminId,
+        ?string $reference = null,
+        ?string $method = null
+    ): MentorBooking {
         if ((string) $booking->status !== 'completed') {
             throw new \RuntimeException('Only a completed session can have its payout marked.');
         }
@@ -598,10 +602,14 @@ class SessionCreditLogic
             $booking->mentor_payout_status = 'pending';
             $booking->mentor_paid_at = null;
             $booking->mentor_paid_by_admin_id = null;
+            $booking->mentor_payout_method = null;
+            $booking->mentor_payout_reference = null;
         } else {
             $booking->mentor_payout_status = 'paid';
             $booking->mentor_paid_at = now();
             $booking->mentor_paid_by_admin_id = $adminId;
+            $booking->mentor_payout_method = $method ?: 'upi';
+            $booking->mentor_payout_reference = $reference ?: null;
         }
         $booking->save();
 

@@ -49,7 +49,7 @@ class MentorSessionPackController extends Controller
 
     public function show(int $id): View
     {
-        $credit = MentorSessionCredit::with(['mentor', 'mentee'])->findOrFail($id);
+        $credit = MentorSessionCredit::with(['mentor.settings', 'mentee'])->findOrFail($id);
 
         $bookings = $credit->bookings()
             ->with(['service'])
@@ -81,12 +81,17 @@ class MentorSessionPackController extends Controller
         return back();
     }
 
-    public function toggleMentorPayout(int $bookingId): RedirectResponse
+    public function toggleMentorPayout(Request $request, int $bookingId): RedirectResponse
     {
         $booking = \App\Model\Mentor\MentorBooking::findOrFail($bookingId);
 
         try {
-            $booking = SessionCreditLogic::toggleMentorPayout($booking, auth('admin')->id());
+            $booking = SessionCreditLogic::toggleMentorPayout(
+                $booking,
+                auth('admin')->id(),
+                $request->input('reference'),
+                $request->input('method')
+            );
             Toastr::success((string) $booking->mentor_payout_status === 'paid'
                 ? translate('Mentor payout marked as paid')
                 : translate('Mentor payout marked as pending'));

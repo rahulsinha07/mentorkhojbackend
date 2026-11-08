@@ -109,6 +109,8 @@ class MentorEarningsLogic
             // is only tracked per MentorBooking today.
             'payout_status' => $booking?->mentor_payout_status,
             'paid_at' => $booking?->mentor_paid_at?->toIso8601String(),
+            'payout_method' => $booking?->mentor_payout_method,
+            'payout_reference' => $booking?->mentor_payout_reference,
             'created_at' => $earning->created_at?->toIso8601String(),
         ];
     }

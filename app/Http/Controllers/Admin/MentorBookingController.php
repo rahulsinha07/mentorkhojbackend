@@ -112,7 +112,7 @@ class MentorBookingController extends Controller
 
     public function show(int $id): View
     {
-        $booking = MentorBooking::with(['mentor.user', 'service', 'mentee', 'earnings'])->findOrFail($id);
+        $booking = MentorBooking::with(['mentor.user', 'mentor.settings', 'service', 'mentee', 'earnings'])->findOrFail($id);
 
         return view('admin-views.mentor.bookings.view', compact('booking'));
     }
@@ -158,12 +158,17 @@ class MentorBookingController extends Controller
         return back();
     }
 
-    public function toggleMentorPayout(int $id): RedirectResponse
+    public function toggleMentorPayout(Request $request, int $id): RedirectResponse
     {
         $booking = MentorBooking::findOrFail($id);
 
         try {
-            $booking = SessionCreditLogic::toggleMentorPayout($booking, auth('admin')->id());
+            $booking = SessionCreditLogic::toggleMentorPayout(
+                $booking,
+                auth('admin')->id(),
+                $request->input('reference'),
+                $request->input('method')
+            );
             Toastr::success((string) $booking->mentor_payout_status === 'paid'
                 ? translate('Mentor payout marked as paid')
                 : translate('Mentor payout marked as pending'));

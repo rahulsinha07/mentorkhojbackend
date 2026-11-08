@@ -128,6 +128,9 @@
                                         @if($booking->mentor_paid_at)
                                             <small class="text-muted ml-1">{{ translate('on') }} {{ $booking->mentor_paid_at->format('d M Y') }}</small>
                                         @endif
+                                        @if($booking->mentor_payout_reference)
+                                            <br><small class="text-muted" style="font-family: monospace;">{{ strtoupper($booking->mentor_payout_method ?? 'ref') }}: {{ $booking->mentor_payout_reference }}</small>
+                                        @endif
                                     @else
                                         <span class="badge badge-soft-warning">{{ translate('Pending') }}</span>
                                     @endif
@@ -157,13 +160,72 @@
                             </form>
                         @endif
                         @if($booking->status === 'completed')
-                            <form method="post" action="{{ route('admin.mentor.bookings.toggle-mentor-payout', $booking->id) }}" class="mt-3"
-                                  onsubmit="return confirm('{{ $booking->mentor_payout_status === 'paid' ? translate('Mark this session\'s mentor payout as pending again?') : translate('Confirm the mentor has been paid for this session?') }}');">
-                                @csrf
-                                <button type="submit" class="btn btn-sm {{ $booking->mentor_payout_status === 'paid' ? 'btn-outline-warning' : 'btn-outline-success' }}">
-                                    {{ $booking->mentor_payout_status === 'paid' ? translate('Mark payout pending') : translate('Mark payout done') }}
+                            @if($booking->mentor_payout_status === 'paid')
+                                <form method="post" action="{{ route('admin.mentor.bookings.toggle-mentor-payout', $booking->id) }}" class="mt-3"
+                                      onsubmit="return confirm('{{ translate('Mark this session\'s mentor payout as pending again? This clears the recorded reference.') }}');">
+                                    @csrf
+                                    <button type="submit" class="btn btn-sm btn-outline-warning">{{ translate('Mark payout pending') }}</button>
+                                </form>
+                            @else
+                                <button type="button" class="btn btn-sm btn-outline-success mt-3" data-toggle="modal" data-target="#payoutModal-{{ $booking->id }}">
+                                    {{ translate('Mark payout done') }}
                                 </button>
-                            </form>
+                                @php
+                                    $mentorUpi = $booking->mentor?->upiId();
+                                    $upiAmount = number_format((float) $booking->mentor_net, 2, '.', '');
+                                    $upiNote = 'MentorKhoj session payout #' . $booking->id;
+                                    $upiLink = $mentorUpi
+                                        ? 'upi://pay?pa=' . urlencode($mentorUpi)
+                                            . '&pn=' . urlencode($booking->mentor->display_name ?? 'Mentor')
+                                            . '&am=' . urlencode($upiAmount)
+                                            . '&cu=INR&tn=' . urlencode($upiNote)
+                                        : null;
+                                @endphp
+                                <div class="modal fade" id="payoutModal-{{ $booking->id }}" tabindex="-1" role="dialog">
+                                    <div class="modal-dialog" role="document">
+                                        <form method="post" action="{{ route('admin.mentor.bookings.toggle-mentor-payout', $booking->id) }}">
+                                            @csrf
+                                            <div class="modal-content">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title">{{ translate('Record mentor payout') }}</h5>
+                                                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                                                </div>
+                                                <div class="modal-body">
+                                                    <p class="mb-2">{{ translate('Amount owed for this session') }}: <strong>{{ Helpers::set_symbol($booking->mentor_net) }}</strong></p>
+                                                    @if($mentorUpi)
+                                                        <p class="mb-2">
+                                                            <small class="text-muted d-block">{{ translate('Mentor UPI ID') }}: <span style="font-family: monospace;">{{ $mentorUpi }}</span></small>
+                                                            <a href="{{ $upiLink }}" class="btn btn-sm btn-outline-primary mt-1" target="_blank" rel="noopener">
+                                                                {{ translate('Open in UPI app (GPay/PhonePe) to pay') }} {{ Helpers::set_symbol($booking->mentor_net) }}
+                                                            </a>
+                                                            <br><small class="text-muted">{{ translate('On mobile, this opens your UPI app with the amount pre-filled. After paying, copy the reference/UTR number it shows and paste it below.') }}</small>
+                                                        </p>
+                                                    @else
+                                                        <p class="text-muted"><small>{{ translate('This mentor has not saved a UPI ID yet — pay via your usual method and record the reference below.') }}</small></p>
+                                                    @endif
+                                                    <div class="form-group mt-3">
+                                                        <label>{{ translate('Payment method') }}</label>
+                                                        <select name="method" class="form-control">
+                                                            <option value="upi" selected>{{ translate('UPI') }}</option>
+                                                            <option value="bank">{{ translate('Bank transfer') }}</option>
+                                                            <option value="cash">{{ translate('Cash') }}</option>
+                                                            <option value="other">{{ translate('Other') }}</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form-group">
+                                                        <label>{{ translate('UPI reference / UTR / transaction ID') }} <small class="text-muted">({{ translate('optional, but recommended') }})</small></label>
+                                                        <input type="text" name="reference" class="form-control" placeholder="{{ translate('e.g. 123456789012') }}" maxlength="255">
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">{{ translate('Cancel') }}</button>
+                                                    <button type="submit" class="btn btn-success">{{ translate('Confirm payout') }}</button>
+                                                </div>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            @endif
                         @endif
                         @if($booking->status === 'confirmed' && \App\CentralLogics\SessionCreditLogic::canMarkNoShow($booking))
                             <form method="POST" action="{{ route('admin.mentor.bookings.no-show', $booking->id) }}" class="d-inline" onsubmit="return confirm('Mark as no-show?')">
