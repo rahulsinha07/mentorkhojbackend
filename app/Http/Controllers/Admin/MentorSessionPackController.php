@@ -53,8 +53,7 @@ class MentorSessionPackController extends Controller
 
         $bookings = $credit->bookings()
             ->with(['service'])
-            ->orderByRaw('scheduled_at IS NULL')
-            ->orderBy('scheduled_at')
+            ->orderByRaw('session_number IS NULL')
             ->orderBy('session_number')
             ->orderBy('id')
             ->get();
