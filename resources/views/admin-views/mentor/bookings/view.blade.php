@@ -174,12 +174,12 @@
                                     $mentorUpi = $booking->mentor?->upiId();
                                     $upiAmount = number_format((float) $booking->mentor_net, 2, '.', '');
                                     $upiNote = 'MentorKhoj session payout #' . $booking->id;
-                                    $upiLink = $mentorUpi
-                                        ? 'upi://pay?pa=' . urlencode($mentorUpi)
-                                            . '&pn=' . urlencode($booking->mentor->display_name ?? 'Mentor')
-                                            . '&am=' . urlencode($upiAmount)
-                                            . '&cu=INR&tn=' . urlencode($upiNote)
-                                        : null;
+                                    $upiParams = 'pa=' . urlencode($mentorUpi ?? '')
+                                        . '&pn=' . urlencode($booking->mentor->display_name ?? 'Mentor')
+                                        . '&am=' . urlencode($upiAmount)
+                                        . '&cu=INR&tn=' . urlencode($upiNote);
+                                    $upiLink = $mentorUpi ? 'upi://pay?' . $upiParams : null;
+                                    $gpayLink = $mentorUpi ? 'tez://upi/pay?' . $upiParams : null;
                                 @endphp
                                 <div class="modal fade" id="payoutModal-{{ $booking->id }}" tabindex="-1" role="dialog">
                                     <div class="modal-dialog" role="document">
@@ -195,10 +195,13 @@
                                                     @if($mentorUpi)
                                                         <p class="mb-2">
                                                             <small class="text-muted d-block">{{ translate('Mentor UPI ID') }}: <span style="font-family: monospace;">{{ $mentorUpi }}</span></small>
-                                                            <a href="{{ $upiLink }}" class="btn btn-sm btn-outline-primary mt-1" target="_blank" rel="noopener">
-                                                                {{ translate('Open in UPI app (GPay/PhonePe) to pay') }} {{ Helpers::set_symbol($booking->mentor_net) }}
+                                                            <a href="{{ $gpayLink }}" class="btn btn-sm btn-outline-primary mt-1" target="_blank" rel="noopener">
+                                                                {{ translate('Open in Google Pay') }} {{ Helpers::set_symbol($booking->mentor_net) }}
                                                             </a>
-                                                            <br><small class="text-muted">{{ translate('On mobile, this opens your UPI app with the amount pre-filled. After paying, copy the reference/UTR number it shows and paste it below.') }}</small>
+                                                            <a href="{{ $upiLink }}" class="btn btn-sm btn-outline-secondary mt-1" target="_blank" rel="noopener">
+                                                                {{ translate('Open in any UPI app') }}
+                                                            </a>
+                                                            <br><small class="text-muted">{{ translate('On mobile, this opens your UPI app with the amount pre-filled. If the wrong app opens, use the "any UPI app" link and pick Google Pay from the chooser, or set GPay as your phone\'s default UPI app. After paying, copy the reference/UTR number it shows and paste it below.') }}</small>
                                                         </p>
                                                     @else
                                                         <p class="text-muted"><small>{{ translate('This mentor has not saved a UPI ID yet — pay via your usual method and record the reference below.') }}</small></p>
