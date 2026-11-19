@@ -1,11 +1,16 @@
 <?php
 
 use App\Http\Controllers\Api\V1\DemoBookingController;
+use App\Http\Controllers\Api\V1\GoogleAdsLeadWebhookController;
 use App\Http\Controllers\Api\V1\SessionChatController;
 use Illuminate\Support\Facades\Route;
 
 // Public create — no auth (free demo form from LPs)
 Route::post('demo-bookings', [DemoBookingController::class, 'store']);
+
+// Public — Google Ads lead form webhook (verified via google_key, see GoogleAdsLeadWebhookController)
+Route::post('google-ads/lead-webhook', [GoogleAdsLeadWebhookController::class, 'handle'])
+    ->withoutMiddleware('throttle');
 
 // Optional logged-in list
 Route::middleware('auth:api')->group(function () {

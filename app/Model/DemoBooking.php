@@ -17,6 +17,7 @@ class DemoBooking extends Model
 
     protected $fillable = [
         'booking_ref',
+        'external_lead_id',
         'name',
         'phone',
         'email',
