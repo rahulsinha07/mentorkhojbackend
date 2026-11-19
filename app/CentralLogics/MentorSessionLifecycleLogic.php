@@ -454,6 +454,7 @@ class MentorSessionLifecycleLogic
     {
         if (!empty($input['meeting_url'])) {
             $booking->meeting_link_source = 'manual';
+            $booking->zoho_start_link = null;
 
             return;
         }
@@ -479,10 +480,12 @@ class MentorSessionLifecycleLogic
         if ($result) {
             $booking->meeting_url = $result['join_url'];
             $booking->zoho_meeting_id = $result['meeting_id'];
+            $booking->zoho_start_link = $result['start_url'] ?? null;
             $booking->meeting_link_source = 'zoho';
             $booking->zoho_last_error = null;
         } else {
             $booking->meeting_link_source = 'manual';
+            $booking->zoho_start_link = null;
             $booking->zoho_last_error = 'Zoho meeting creation failed; add a meeting link manually.';
         }
     }

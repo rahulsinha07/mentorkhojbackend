@@ -182,40 +182,65 @@ class MentorBookingMailLogic
             return false;
         }
 
-        $recipients = array_values(array_unique(array_filter([
-            self::menteeEmail($booking),
-            self::mentorEmail($booking),
-        ])));
+        $menteeEmail = self::menteeEmail($booking);
+        $mentorEmail = self::mentorEmail($booking);
 
-        if ($recipients === []) {
+        if (!$menteeEmail && !$mentorEmail) {
             MentorSessionNotificationLogic::markFailed($claim, 'No recipient emails');
 
             return false;
         }
 
-        try {
-            Mail::to($recipients)
-                ->cc(FormMailLogic::notifyEmail())
-                ->send(new FormSubmissionMail(
+        // Sent separately, not combined, so the mentor gets their own Zoho
+        // host link (meetingUrlFor() via bookingContext(forMentor: true))
+        // instead of the mentee's plain join link.
+        $sentAny = false;
+        $lastError = null;
+
+        if ($menteeEmail) {
+            try {
+                Mail::to($menteeEmail)
+                    ->cc(FormMailLogic::notifyEmail())
+                    ->send(new FormSubmissionMail(
+                        'Reminder: your MentorKhoj session is in 24 hours | MentorKhoj',
+                        'email-templates.form.mentor-booking-session-reminder-24h',
+                        FormMailLogic::withBrandPublic(self::bookingContext($booking, confirmed: true))
+                    ));
+                $sentAny = true;
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+                Log::warning('Session 24h reminder email failed (mentee): ' . $e->getMessage());
+            }
+        }
+
+        if ($mentorEmail) {
+            try {
+                Mail::to($mentorEmail)->send(new FormSubmissionMail(
                     'Reminder: your MentorKhoj session is in 24 hours | MentorKhoj',
                     'email-templates.form.mentor-booking-session-reminder-24h',
-                    FormMailLogic::withBrandPublic(self::bookingContext($booking, confirmed: true))
+                    FormMailLogic::withBrandPublic(self::bookingContext($booking, forMentor: true, confirmed: true))
                 ));
-
-            MentorSessionNotificationLogic::markSent($claim);
-
-            if (self::hasEmailTimestampColumn('session_reminder_24h_sent_at')) {
-                $booking->session_reminder_24h_sent_at = now();
-                $booking->save();
+                $sentAny = true;
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+                Log::warning('Session 24h reminder email failed (mentor): ' . $e->getMessage());
             }
+        }
 
-            return true;
-        } catch (\Throwable $e) {
-            MentorSessionNotificationLogic::markFailed($claim, $e->getMessage());
-            Log::warning('Session 24h reminder email failed: ' . $e->getMessage());
+        if (!$sentAny) {
+            MentorSessionNotificationLogic::markFailed($claim, (string) $lastError);
 
             return false;
         }
+
+        MentorSessionNotificationLogic::markSent($claim);
+
+        if (self::hasEmailTimestampColumn('session_reminder_24h_sent_at')) {
+            $booking->session_reminder_24h_sent_at = now();
+            $booking->save();
+        }
+
+        return true;
     }
 
     public static function sendPackageAssignedEmails(MentorSessionCredit $credit): bool
@@ -457,8 +482,23 @@ class MentorBookingMailLogic
             'confirmed' => $confirmed,
             'mentee_note' => trim((string) ($booking->mentee_note ?? '')),
             'is_free_session' => $isFreeSession,
-            'meeting_url' => $booking->meeting_url,
+            'meeting_url' => self::meetingUrlFor($booking, $forMentor),
         ];
+    }
+
+    /**
+     * Zoho only grants host status to whoever opens zoho_start_link; the
+     * plain join link (meeting_url) leaves the mentor stuck without host
+     * controls (mute/record/end-for-all) on their own session. The mentee
+     * always gets the join link either way.
+     */
+    private static function meetingUrlFor(MentorBooking $booking, bool $forMentor): ?string
+    {
+        if ($forMentor && $booking->meeting_link_source === 'zoho' && $booking->zoho_start_link) {
+            return $booking->zoho_start_link;
+        }
+
+        return $booking->meeting_url;
     }
 
     /** @return array<string, mixed> */
@@ -523,15 +563,18 @@ class MentorBookingMailLogic
 
     /**
      * WhatsApp both sides once a session's date/time/join link is set —
-     * mentee and mentor each get the other's name, the time, the join link,
-     * and a link to their own dashboard for full details.
+     * mentee and mentor each get the other's name, the time, their own
+     * dashboard link, and the meeting link (the mentor gets the Zoho host
+     * link, see meetingUrlFor(), so they get host controls on their own
+     * session instead of being stuck as a plain participant).
      */
     private static function sendWhatsAppSessionScheduled(MentorBooking $booking, string $date, string $time): void
     {
         $ctx = self::bookingContext($booking, confirmed: true);
         $menteeName = self::firstNameFromUser($booking->mentee);
         $mentorName = self::firstNameFromMentor($booking->mentor);
-        $joinLink = trim((string) ($booking->meeting_url ?? '')) ?: 'will be shared shortly';
+        $menteeJoinLink = trim((string) ($booking->meeting_url ?? '')) ?: 'will be shared shortly';
+        $mentorJoinLink = trim((string) (self::meetingUrlFor($booking, true) ?? '')) ?: 'will be shared shortly';
 
         $menteePhone = trim((string) ($booking->mentee?->phone ?? ''));
         if ($menteePhone !== '') {
@@ -541,7 +584,7 @@ class MentorBookingMailLogic
                 $mentorName,
                 $date,
                 $time,
-                $joinLink,
+                $menteeJoinLink,
                 $ctx['session_access_link']
             );
         }
@@ -554,7 +597,7 @@ class MentorBookingMailLogic
                 $menteeName,
                 $date,
                 $time,
-                $joinLink,
+                $mentorJoinLink,
                 $ctx['mentor_dashboard_link']
             );
         }
@@ -657,40 +700,65 @@ class MentorBookingMailLogic
             return false;
         }
 
-        $recipients = array_values(array_unique(array_filter([
-            self::menteeEmail($booking),
-            self::mentorEmail($booking),
-        ])));
+        $menteeEmail = self::menteeEmail($booking);
+        $mentorEmail = self::mentorEmail($booking);
 
-        if ($recipients === []) {
+        if (!$menteeEmail && !$mentorEmail) {
             MentorSessionNotificationLogic::markFailed($claim, 'No recipient emails');
 
             return false;
         }
 
-        try {
-            Mail::to($recipients)
-                ->cc(FormMailLogic::notifyEmail())
-                ->send(new FormSubmissionMail(
+        // Sent separately, not combined, so the mentor gets their own Zoho
+        // host link (meetingUrlFor() via bookingContext(forMentor: true))
+        // instead of the mentee's plain join link.
+        $sentAny = false;
+        $lastError = null;
+
+        if ($menteeEmail) {
+            try {
+                Mail::to($menteeEmail)
+                    ->cc(FormMailLogic::notifyEmail())
+                    ->send(new FormSubmissionMail(
+                        'Reminder: your MentorKhoj session starts in 1 hour | MentorKhoj',
+                        'email-templates.sessions.session-reminder-1h',
+                        FormMailLogic::withBrandPublic(self::bookingContext($booking, confirmed: true))
+                    ));
+                $sentAny = true;
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+                Log::warning('Session 1h reminder email failed (mentee): ' . $e->getMessage());
+            }
+        }
+
+        if ($mentorEmail) {
+            try {
+                Mail::to($mentorEmail)->send(new FormSubmissionMail(
                     'Reminder: your MentorKhoj session starts in 1 hour | MentorKhoj',
                     'email-templates.sessions.session-reminder-1h',
-                    FormMailLogic::withBrandPublic(self::bookingContext($booking, confirmed: true))
+                    FormMailLogic::withBrandPublic(self::bookingContext($booking, forMentor: true, confirmed: true))
                 ));
-
-            MentorSessionNotificationLogic::markSent($claim);
-
-            if (self::hasEmailTimestampColumn('session_reminder_1h_sent_at')) {
-                $booking->session_reminder_1h_sent_at = now();
-                $booking->save();
+                $sentAny = true;
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+                Log::warning('Session 1h reminder email failed (mentor): ' . $e->getMessage());
             }
+        }
 
-            return true;
-        } catch (\Throwable $e) {
-            MentorSessionNotificationLogic::markFailed($claim, $e->getMessage());
-            Log::warning('Session 1h reminder email failed: ' . $e->getMessage());
+        if (!$sentAny) {
+            MentorSessionNotificationLogic::markFailed($claim, (string) $lastError);
 
             return false;
         }
+
+        MentorSessionNotificationLogic::markSent($claim);
+
+        if (self::hasEmailTimestampColumn('session_reminder_1h_sent_at')) {
+            $booking->session_reminder_1h_sent_at = now();
+            $booking->save();
+        }
+
+        return true;
     }
 
     public static function sendSessionCancelled(MentorBooking $booking, string $reason, bool $slotRestored = false): bool

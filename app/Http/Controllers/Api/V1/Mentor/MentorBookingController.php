@@ -822,7 +822,7 @@ class MentorBookingController extends Controller
             return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
         }
 
-        return $this->icsResponse($booking);
+        return $this->icsResponse($booking, false);
     }
 
     public function downloadMentorIcs(Request $request, int $id)
@@ -837,7 +837,7 @@ class MentorBookingController extends Controller
             return response()->json(['errors' => [['message' => 'Booking not found']]], 404);
         }
 
-        return $this->icsResponse($booking);
+        return $this->icsResponse($booking, true);
     }
 
     private function handleCancel(Request $request, MentorBooking $booking, bool $forMentor): JsonResponse
@@ -863,10 +863,10 @@ class MentorBookingController extends Controller
         ]);
     }
 
-    private function icsResponse(MentorBooking $booking)
+    private function icsResponse(MentorBooking $booking, bool $forMentor = false)
     {
         try {
-            $ics = SessionIcsLogic::generate($booking);
+            $ics = SessionIcsLogic::generate($booking, $forMentor);
         } catch (\Throwable $e) {
             return response()->json(['errors' => [['message' => $e->getMessage()]]], 422);
         }

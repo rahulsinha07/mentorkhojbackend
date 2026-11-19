@@ -7,7 +7,7 @@ use Carbon\Carbon;
 
 class SessionIcsLogic
 {
-    public static function generate(MentorBooking $booking): string
+    public static function generate(MentorBooking $booking, bool $forMentor = false): string
     {
         $when = SessionCreditLogic::sessionDateTime($booking);
         if (!$when) {
@@ -22,7 +22,12 @@ class SessionIcsLogic
         $serviceTitle = $booking->service?->title ?? 'Mentor session';
         $summary = "{$serviceTitle} with {$mentorName}";
         $uid = "mentorkhoj-session-{$booking->id}@mentorkhoj.com";
-        $description = $booking->meeting_url ? "Join: {$booking->meeting_url}" : 'MentorKhoj session';
+        // Mentor gets the host start link (so opening it grants host status
+        // without a Zoho login) — see ZohoMeetingService::createMeeting().
+        $meetingUrl = ($forMentor && $booking->meeting_link_source === 'zoho' && $booking->zoho_start_link)
+            ? $booking->zoho_start_link
+            : $booking->meeting_url;
+        $description = $meetingUrl ? "Join: {$meetingUrl}" : 'MentorKhoj session';
 
         $lines = [
             'BEGIN:VCALENDAR',
@@ -37,7 +42,7 @@ class SessionIcsLogic
             'DTEND:'.self::icsUtc($end),
             'SUMMARY:'.self::escape($summary),
             'DESCRIPTION:'.self::escape($description),
-            'LOCATION:'.self::escape($booking->meeting_url ?? 'Online'),
+            'LOCATION:'.self::escape($meetingUrl ?? 'Online'),
             'STATUS:CONFIRMED',
             'BEGIN:VALARM',
             'TRIGGER:-PT15M',

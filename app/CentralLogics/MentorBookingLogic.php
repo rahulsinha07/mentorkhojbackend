@@ -125,8 +125,31 @@ class MentorBookingLogic
         }
 
         MentorBookingMailLogic::maybeSendAfterPayment($booking);
+        self::notifyMentorOfNewBooking($booking);
 
         return $booking;
+    }
+
+    private static function notifyMentorOfNewBooking(MentorBooking $booking): void
+    {
+        $booking->loadMissing(['mentor.user', 'mentee', 'service']);
+
+        $mentorUserId = (int) ($booking->mentor?->user_id ?? 0);
+        if ($mentorUserId <= 0) {
+            return;
+        }
+
+        $menteeName = trim((string) ($booking->mentee?->f_name ?? '') . ' ' . (string) ($booking->mentee?->l_name ?? ''));
+        $serviceTitle = (string) ($booking->service?->title ?? 'a session');
+
+        UserNotificationLogic::create(
+            $mentorUserId,
+            'booking_requested',
+            'New booking request',
+            ($menteeName !== '' ? $menteeName : 'A student') . " booked {$serviceTitle}.",
+            UserNotificationLogic::sessionLink($booking, true),
+            (int) $booking->id
+        );
     }
 
     public static function markPaymentFailed(MentorBooking $booking, ?string $reason = null): MentorBooking
@@ -496,7 +519,14 @@ class MentorBookingLogic
             'duration_minutes' => $booking->duration_minutes ?? $booking->service?->duration_minutes,
             'session_type' => $booking->session_type ?? $booking->service?->meeting_type,
             'timezone' => $booking->timezone ?? MentorSessionLifecycleLogic::appTimezone(),
-            'meeting_url' => $booking->meeting_url,
+            // Zoho only recognizes whoever opens zoho_start_link as host; the
+            // plain join link (meeting_url) leaves everyone, mentor included,
+            // stuck on "waiting for host". Give the mentor the start link so
+            // they can actually start the session; the mentee keeps the join
+            // link either way.
+            'meeting_url' => ($forMentor && $booking->meeting_link_source === 'zoho' && $booking->zoho_start_link)
+                ? $booking->zoho_start_link
+                : $booking->meeting_url,
             'meeting_link_source' => $booking->meeting_link_source,
             'zoho_last_error' => $booking->zoho_last_error,
             'recording' => $booking->recording_play_url ? [

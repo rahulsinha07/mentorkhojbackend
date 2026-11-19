@@ -53,6 +53,7 @@ class MentorBooking extends Model
         'preferred_time',
         'scheduled_at',
         'meeting_url',
+        'zoho_start_link',
         'mentee_note',
         'mentor_notes',
         'mentee_notes',

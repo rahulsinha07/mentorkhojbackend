@@ -178,7 +178,7 @@ class ZohoMeetingService
     /**
      * Creates a Zoho Meeting for the given booking.
      *
-     * @return array{meeting_id: string, join_url: string}|null
+     * @return array{meeting_id: string, join_url: string, start_url: string}|null
      */
     public function createMeeting(MentorBooking $booking): ?array
     {
@@ -199,7 +199,7 @@ class ZohoMeetingService
      * Creates a short-lived throwaway meeting, used by the admin "Test
      * Connection" action. Caller is responsible for deleting it afterwards.
      *
-     * @return array{meeting_id: string, join_url: string}|null
+     * @return array{meeting_id: string, join_url: string, start_url: string}|null
      */
     public function createTestMeeting(): ?array
     {
@@ -211,7 +211,7 @@ class ZohoMeetingService
     }
 
     /**
-     * @return array{meeting_id: string, join_url: string}|null
+     * @return array{meeting_id: string, join_url: string, start_url: string}|null
      */
     private function createMeetingRaw(string $topic, \DateTimeInterface $startTime, int $durationMinutes): ?array
     {
@@ -261,6 +261,13 @@ class ZohoMeetingService
 
             $meetingId = (string) (data_get($json, 'session.meetingKey') ?: '');
             $joinUrl = (string) (data_get($json, 'session.joinLink') ?: '');
+            // Zoho only lets whoever is logged into the connected presenter's
+            // own Zoho account be recognized as host via joinLink — which
+            // none of our mentors are. startLink carries a host token in the
+            // URL itself, so opening it starts the session as host without
+            // needing that login. Without it, every joiner (mentor included)
+            // sits in "waiting for host" forever.
+            $startUrl = (string) (data_get($json, 'session.startLink') ?: '');
 
             if ($meetingId === '' || $joinUrl === '') {
                 $this->recordError('Zoho createMeeting succeeded but response shape was unexpected: '.mb_substr($response->body(), 0, 500));
@@ -268,7 +275,7 @@ class ZohoMeetingService
                 return null;
             }
 
-            return ['meeting_id' => $meetingId, 'join_url' => $joinUrl];
+            return ['meeting_id' => $meetingId, 'join_url' => $joinUrl, 'start_url' => $startUrl];
         } catch (\Throwable $e) {
             $this->recordError('Zoho createMeeting threw: '.$e->getMessage());
 
@@ -304,6 +311,44 @@ class ZohoMeetingService
             Log::error('Zoho deleteMeeting threw', ['meeting_id' => $zohoMeetingId, 'message' => $e->getMessage()]);
 
             return false;
+        }
+    }
+
+    /**
+     * Fetches the host-only startLink for an already-created meeting.
+     * Used to backfill bookings created before zoho_start_link existed —
+     * new bookings get it directly from createMeeting()'s response instead.
+     */
+    public function getStartLink(string $zohoMeetingId): ?string
+    {
+        $token = $this->refreshAccessTokenIfNeeded();
+        $setting = ZohoSetting::current();
+        if (!$token || $zohoMeetingId === '' || empty($setting->zoho_account_id)) {
+            return null;
+        }
+
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Zoho-oauthtoken '.$token,
+            ])->get(self::MEETING_BASE.'/'.$setting->zoho_account_id.'/sessions/'.$zohoMeetingId.'.json');
+
+            if (!$response->successful()) {
+                Log::error('Zoho getStartLink failed', [
+                    'meeting_id' => $zohoMeetingId,
+                    'http' => $response->status(),
+                    'body' => mb_substr($response->body(), 0, 500),
+                ]);
+
+                return null;
+            }
+
+            $startLink = (string) (data_get($response->json(), 'session.startLink') ?: '');
+
+            return $startLink !== '' ? $startLink : null;
+        } catch (\Throwable $e) {
+            Log::error('Zoho getStartLink threw', ['meeting_id' => $zohoMeetingId, 'message' => $e->getMessage()]);
+
+            return null;
         }
     }
 
