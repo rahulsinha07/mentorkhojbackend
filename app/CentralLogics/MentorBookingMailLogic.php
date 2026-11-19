@@ -501,6 +501,18 @@ class MentorBookingMailLogic
         return $booking->meeting_url;
     }
 
+    /**
+     * WhatsApp-only: appends a short note to a real meeting link so mobile
+     * users aren't surprised when Zoho's join page has no browser option.
+     * Returns a fallback string unchanged if there's no link yet.
+     */
+    private static function withMobileAppNote(?string $url): string
+    {
+        $url = trim((string) $url);
+
+        return $url !== '' ? $url . ' (On phone: tap Install App once, free)' : 'will be shared shortly';
+    }
+
     /** @return array<string, mixed> */
     public static function packageContext(MentorSessionCredit $credit): array
     {
@@ -573,8 +585,11 @@ class MentorBookingMailLogic
         $ctx = self::bookingContext($booking, confirmed: true);
         $menteeName = self::firstNameFromUser($booking->mentee);
         $mentorName = self::firstNameFromMentor($booking->mentor);
-        $menteeJoinLink = trim((string) ($booking->meeting_url ?? '')) ?: 'will be shared shortly';
-        $mentorJoinLink = trim((string) (self::meetingUrlFor($booking, true) ?? '')) ?: 'will be shared shortly';
+        // On mobile, Zoho's join page has no browser option — the first-time
+        // app install is unavoidable there, so we say so up front rather than
+        // let it be a surprise when the join link doesn't "just work."
+        $menteeJoinLink = self::withMobileAppNote($booking->meeting_url);
+        $mentorJoinLink = self::withMobileAppNote(self::meetingUrlFor($booking, true));
 
         $menteePhone = trim((string) ($booking->mentee?->phone ?? ''));
         if ($menteePhone !== '') {
