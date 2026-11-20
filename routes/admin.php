@@ -37,6 +37,7 @@ use App\Http\Controllers\Admin\SeminarBookingAdminController;
 use App\Http\Controllers\Admin\DemoBookingAdminController;
 use App\Http\Controllers\Admin\ExamSessionController;
 use App\Http\Controllers\Admin\CollegeCutoffController;
+use App\Http\Controllers\Admin\NeetCategoryCutoffController;
 use App\Http\Controllers\Admin\StudentSectionAdminController;
 use App\Http\Controllers\Admin\WhatsAppMessagingAdminController;
 use App\Http\Controllers\Admin\InternshipController;
@@ -280,6 +281,13 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::get('/', [CollegeCutoffController::class, 'index'])->name('index');
             Route::post('import', [CollegeCutoffController::class, 'import'])->name('import');
             Route::delete('{year}/{round}', [CollegeCutoffController::class, 'destroy'])->name('destroy');
+        });
+
+        Route::group(['prefix' => 'neet-category-cutoffs', 'as' => 'neet-category-cutoffs.', 'middleware' => ['module:system_management']], function () {
+            Route::get('/', [NeetCategoryCutoffController::class, 'index'])->name('index');
+            Route::post('/', [NeetCategoryCutoffController::class, 'store'])->name('store');
+            Route::put('{id}', [NeetCategoryCutoffController::class, 'update'])->name('update');
+            Route::delete('{id}', [NeetCategoryCutoffController::class, 'destroy'])->name('destroy');
         });
 
         Route::group(['prefix' => 'whatsapp-messaging', 'as' => 'whatsapp-messaging.', 'middleware' => ['module:promotion_management']], function () {

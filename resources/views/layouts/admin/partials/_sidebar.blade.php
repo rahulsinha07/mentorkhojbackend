@@ -427,6 +427,16 @@
                                 </a>
                             </li>
 
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/neet-category-cutoffs*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.neet-category-cutoffs.index')}}"
+                                   title="NEET Category Cutoffs"
+                                >
+                                    <i class="tio-calculator nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">NEET Category Cutoffs</span>
+                                </a>
+                            </li>
+
                             <li class="navbar-vertical-aside-has-menu {{Request::is('admin/student-sections*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link"
                                    href="{{route('admin.student-sections.index')}}"
