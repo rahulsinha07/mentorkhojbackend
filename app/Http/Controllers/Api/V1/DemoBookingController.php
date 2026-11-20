@@ -32,6 +32,9 @@ class DemoBookingController extends Controller
             'utm_medium' => 'nullable|string|max:120',
             'utm_campaign' => 'nullable|string|max:120',
             'utm_content' => 'nullable|string|max:120',
+            'gclid' => 'nullable|string|max:191',
+            'wbraid' => 'nullable|string|max:191',
+            'gbraid' => 'nullable|string|max:191',
             'message' => 'nullable|string|max:2000',
         ]);
 
