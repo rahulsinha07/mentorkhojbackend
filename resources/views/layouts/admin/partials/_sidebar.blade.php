@@ -407,6 +407,16 @@
                                 </a>
                             </li>
 
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/exam-sessions*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.exam-sessions.index')}}"
+                                   title="Exam Sessions"
+                                >
+                                    <i class="tio-calculator nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">Exam Sessions</span>
+                                </a>
+                            </li>
+
                             <li class="navbar-vertical-aside-has-menu {{Request::is('admin/student-sections*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link"
                                    href="{{route('admin.student-sections.index')}}"

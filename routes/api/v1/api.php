@@ -236,5 +236,6 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
     require __DIR__.'/internships.php';
     require __DIR__.'/demo-bookings.php';
     require __DIR__.'/invoices.php';
+    require __DIR__.'/tools.php';
 
 });
