@@ -417,6 +417,16 @@
                                 </a>
                             </li>
 
+                            <li class="navbar-vertical-aside-has-menu {{Request::is('admin/college-cutoffs*')?'active':''}}">
+                                <a class="js-navbar-vertical-aside-menu-link nav-link"
+                                   href="{{route('admin.college-cutoffs.index')}}"
+                                   title="College Cutoffs"
+                                >
+                                    <i class="tio-university nav-icon"></i>
+                                    <span class="navbar-vertical-aside-mini-mode-hidden-elements text-truncate">College Cutoffs</span>
+                                </a>
+                            </li>
+
                             <li class="navbar-vertical-aside-has-menu {{Request::is('admin/student-sections*')?'active':''}}">
                                 <a class="js-navbar-vertical-aside-menu-link nav-link"
                                    href="{{route('admin.student-sections.index')}}"
