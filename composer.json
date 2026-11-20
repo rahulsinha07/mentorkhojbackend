@@ -17,6 +17,7 @@
         "carlos-meneses/laravel-mpdf": "^2.1",
         "dgvai/laravel-sslcommerz": "^1.0",
         "doctrine/dbal": "^3.0",
+        "google/apiclient": "^2.18",
         "gregwar/captcha": "^1.1",
         "guzzlehttp/guzzle": "^7.0.1",
         "intervention/image": "^2.5",

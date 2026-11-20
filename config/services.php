@@ -35,4 +35,9 @@ return [
         'api_key' => env('ANTHROPIC_API_KEY'),
     ],
 
+    'search_console' => [
+        'credentials_path' => env('GOOGLE_SEARCH_CONSOLE_CREDENTIALS', storage_path('app/google-service-account.json')),
+        'site_url' => env('GOOGLE_SEARCH_CONSOLE_SITE_URL', 'https://www.mentorkhoj.com/'),
+    ],
+
 ];
