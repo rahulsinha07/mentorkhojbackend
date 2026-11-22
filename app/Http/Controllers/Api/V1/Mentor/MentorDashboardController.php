@@ -97,6 +97,13 @@ class MentorDashboardController extends Controller
         MentorSetting::create(['mentor_id' => $mentor->id]);
 
         $user = $request->user();
+        if ($user->account_type !== 'mentor') {
+            // Without this, the login portal gate (AccountTypeLogic::validateLoginPortal)
+            // permanently rejects this user's next login_as=mentor attempt, even though
+            // they now have a working mentor profile.
+            $user->account_type = 'mentor';
+            $user->save();
+        }
         $welcomeEmailSent = false;
 
         try {

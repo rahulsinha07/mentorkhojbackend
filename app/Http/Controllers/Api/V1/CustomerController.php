@@ -6,6 +6,7 @@ use App\CentralLogics\Helpers;
 use App\Http\Controllers\Controller;
 use App\Model\Conversation;
 use App\Model\CustomerAddress;
+use App\Model\Mentor\MentorSessionCredit;
 use App\Model\Newsletter;
 use App\Model\Order;
 use App\Models\GuestUser;
@@ -334,6 +335,14 @@ class CustomerController extends Controller
 
         if ($runningOrdersCount > 0){
             return response()->json(['errors' => [['code' => 'customer', 'message' => translate("You have {$runningOrdersCount} running order. Please complete the running order first")]]], 403);
+        }
+
+        $unusedSessionPacksCount = MentorSessionCredit::where('mentee_user_id', $request->user()->id)
+            ->whereColumn('credits_used', '<', 'credits_total')
+            ->count();
+
+        if ($unusedSessionPacksCount > 0) {
+            return response()->json(['errors' => [['code' => 'customer', 'message' => translate("You have unused mentor sessions remaining. Please use or cancel them before deleting your account")]]], 403);
         }
 
         Helpers::file_remover('profile/', $customer->image);

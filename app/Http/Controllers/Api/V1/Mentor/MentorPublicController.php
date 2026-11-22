@@ -40,7 +40,14 @@ class MentorPublicController extends Controller
         $offset = (int) ($request->offset ?? 0);
 
         $total = $query->count();
+        // view_count changes live as mentors get viewed, so ties on it are
+        // common. Without a deterministic tiebreaker, MySQL can order tied
+        // rows differently between two identical requests — shuffling any
+        // un-ranked mentor's position (and page membership under limit/offset)
+        // request to request. id is unique and immutable, so it always
+        // resolves ties the same way.
         $mentors = $query->orderByDesc('view_count')
+            ->orderBy('id')
             ->skip($offset)
             ->take($limit)
             ->get()
