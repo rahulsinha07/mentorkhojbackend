@@ -56,19 +56,27 @@ class SessionCreditLogic
         float $totalAmountGross,
         ?int $adminId = null,
         ?string $note = null,
-        ?float $feePercent = null
+        ?float $feePercent = null,
+        string $packType = 'paid'
     ): MentorSessionCredit {
         if ($count < 1) {
             throw new \InvalidArgumentException('Session count must be at least 1.');
         }
-        if ($totalAmountGross <= 0) {
+        // Paid packs must be backed by real money; demo/free packs are
+        // intentionally zero-amount and never touch a paid pack's fund math
+        // because each pack_type gets its own row (see pair_type_unique).
+        if ($packType === 'paid' && $totalAmountGross <= 0) {
             throw new \InvalidArgumentException('Total amount must be greater than zero.');
         }
+        if ($totalAmountGross < 0) {
+            throw new \InvalidArgumentException('Total amount cannot be negative.');
+        }
 
-        return DB::transaction(function () use ($mentee, $mentor, $count, $totalAmountGross, $adminId, $note, $feePercent) {
+        return DB::transaction(function () use ($mentee, $mentor, $count, $totalAmountGross, $adminId, $note, $feePercent, $packType) {
             $credit = MentorSessionCredit::query()
                 ->where('mentee_user_id', $mentee->id)
                 ->where('mentor_id', $mentor->id)
+                ->where('pack_type', $packType)
                 ->lockForUpdate()
                 ->first();
 
@@ -76,6 +84,7 @@ class SessionCreditLogic
                 $credit = MentorSessionCredit::create([
                     'mentee_user_id' => $mentee->id,
                     'mentor_id' => $mentor->id,
+                    'pack_type' => $packType,
                     'credits_total' => 0,
                     'credits_used' => 0,
                     'fund_total' => 0,

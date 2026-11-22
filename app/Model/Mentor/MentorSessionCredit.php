@@ -14,6 +14,7 @@ class MentorSessionCredit extends Model
     protected $fillable = [
         'mentee_user_id',
         'mentor_id',
+        'pack_type',
         'credits_total',
         'credits_used',
         'fund_total',
@@ -40,6 +41,16 @@ class MentorSessionCredit extends Model
     public function isPaymentConfirmed(): bool
     {
         return (string) ($this->payment_status ?? 'pending') === 'paid';
+    }
+
+    public function packType(): string
+    {
+        return (string) ($this->pack_type ?? 'paid');
+    }
+
+    public function isPaidPack(): bool
+    {
+        return $this->packType() === 'paid';
     }
 
     /** This pack's own fee rate if one was set at creation, else the global default. */

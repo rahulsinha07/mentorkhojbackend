@@ -522,39 +522,62 @@
                 <div class="modal-body">
                     <p class="text-muted small">{{ translate('Each session = 1 booked slot with the selected mentor. Remaining count decreases when a session is marked complete.') }}</p>
                     <div class="form-group">
+                        <label>{{ translate('Session type') }}</label>
+                        <div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" id="sessionCreditsTypePaid" name="pack_type" value="paid" class="custom-control-input" checked>
+                                <label class="custom-control-label" for="sessionCreditsTypePaid">{{ translate('Paid') }}</label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" id="sessionCreditsTypeDemo" name="pack_type" value="demo" class="custom-control-input">
+                                <label class="custom-control-label" for="sessionCreditsTypeDemo">{{ translate('Demo') }}</label>
+                            </div>
+                            <div class="custom-control custom-radio custom-control-inline">
+                                <input type="radio" id="sessionCreditsTypeFree" name="pack_type" value="free" class="custom-control-input">
+                                <label class="custom-control-label" for="sessionCreditsTypeFree">{{ translate('Free session') }}</label>
+                            </div>
+                        </div>
+                        <small class="text-muted">{{ translate('Demo is always 1 session. Free lets you set a count. Neither adds an amount or platform fee, and neither touches this mentor\'s paid pack.') }}</small>
+                    </div>
+                    <div class="form-group">
                         <label>{{ translate('Mentor') }}</label>
-                        <select name="mentor_id" class="form-control" required>
+                        <select name="mentor_id" id="sessionCreditsMentorId" class="form-control" required>
                             <option value="">{{ translate('Select mentor') }}</option>
                             @foreach(($activeMentors ?? collect()) as $mentor)
-                                <option value="{{ $mentor->id }}">{{ $mentor->display_name }} ({{ $mentor->username }})</option>
+                                <option value="{{ $mentor->id }}"
+                                    data-services="{{ $mentor->services->map(fn ($s) => ['id' => $s->id, 'title' => $s->title, 'duration_minutes' => $s->duration_minutes])->toJson() }}">
+                                    {{ $mentor->display_name }} ({{ $mentor->username }})
+                                </option>
                             @endforeach
                         </select>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" id="sessionCreditsCountGroup">
                         <label>{{ translate('Sessions') }}</label>
                         <input type="number" name="credits" id="sessionCreditsCount" class="form-control" min="1" max="500" value="10" required>
                     </div>
-                    <div class="form-group">
-                        <label>{{ translate('Total Amount') }} (₹)</label>
-                        <input type="number" name="total_amount" id="sessionCreditsTotalAmount" class="form-control" min="0.01" step="0.01" value="10000" required>
-                    </div>
-                    <div class="form-group">
-                        <label>{{ translate('Platform fee') }}</label>
-                        <select id="sessionCreditsFeeSelect" class="form-control">
-                            <option value="10" selected>10%</option>
-                            <option value="15">15%</option>
-                            <option value="20">20%</option>
-                            <option value="custom">{{ translate('Custom') }}…</option>
-                        </select>
-                        <input type="number" id="sessionCreditsFeeCustom" class="form-control mt-2" min="0" max="100" step="0.01"
-                               placeholder="{{ translate('Enter custom %') }}" style="display:none;">
-                        <input type="hidden" name="platform_fee_percent" id="sessionCreditsFeePercent" value="10">
-                        <small class="text-muted">{{ translate('Only applies when this creates a brand-new session pack for this mentor + student. Topping up an existing pack keeps its original rate.') }}</small>
-                    </div>
-                    <div class="alert alert-soft-info py-2 px-3 mb-3" id="sessionCreditsFundPreview">
-                        <div class="small mb-1"><strong>{{ translate('Fund breakdown') }}</strong></div>
-                        <div class="small" id="fundPreviewLines"></div>
-                        <div class="small text-muted mt-2">{{ translate('Mentor balance increases by the net amount when each session is marked complete.') }}</div>
+                    <div id="sessionCreditsPaidFields">
+                        <div class="form-group">
+                            <label>{{ translate('Total Amount') }} (₹)</label>
+                            <input type="number" name="total_amount" id="sessionCreditsTotalAmount" class="form-control" min="0.01" step="0.01" value="10000">
+                        </div>
+                        <div class="form-group">
+                            <label>{{ translate('Platform fee') }}</label>
+                            <select id="sessionCreditsFeeSelect" class="form-control">
+                                <option value="10" selected>10%</option>
+                                <option value="15">15%</option>
+                                <option value="20">20%</option>
+                                <option value="custom">{{ translate('Custom') }}…</option>
+                            </select>
+                            <input type="number" id="sessionCreditsFeeCustom" class="form-control mt-2" min="0" max="100" step="0.01"
+                                   placeholder="{{ translate('Enter custom %') }}" style="display:none;">
+                            <input type="hidden" name="platform_fee_percent" id="sessionCreditsFeePercent" value="10">
+                            <small class="text-muted">{{ translate('Only applies when this creates a brand-new session pack for this mentor + student. Topping up an existing pack keeps its original rate.') }}</small>
+                        </div>
+                        <div class="alert alert-soft-info py-2 px-3 mb-3" id="sessionCreditsFundPreview">
+                            <div class="small mb-1"><strong>{{ translate('Fund breakdown') }}</strong></div>
+                            <div class="small" id="fundPreviewLines"></div>
+                            <div class="small text-muted mt-2">{{ translate('Mentor balance increases by the net amount when each session is marked complete.') }}</div>
+                        </div>
                     </div>
 
                     <div class="border rounded p-3 mb-3">
@@ -564,6 +587,13 @@
                         </div>
                         <div id="scheduleNowFields" style="display:none;">
                             <p class="text-muted small mb-2">{{ translate('Assign date and time when creating the pack (IST).') }}</p>
+                            <div class="form-group">
+                                <label>{{ translate('Package / Service') }}</label>
+                                <select name="mentor_service_id" id="sessionCreditsServiceId" class="form-control">
+                                    <option value="">{{ translate('Select mentor first') }}</option>
+                                </select>
+                                <small class="text-muted">{{ translate('Which of this mentor\'s services these sessions are booked under. Shown to the student.') }}</small>
+                            </div>
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="form-group">
@@ -616,20 +646,25 @@
                             <option value="">{{ translate('Select') }}</option>
                             @foreach(($sessionCredits ?? collect()) as $credit)
                                 @php
-                                    $packDuration = 20;
                                     $mentorServices = $credit->mentor?->services ?? collect();
-                                    if ($mentorServices->isNotEmpty()) {
-                                        $packDuration = (int) ($mentorServices->first()->duration_minutes ?: 20);
-                                    }
+                                    $packDuration = $mentorServices->isNotEmpty() ? (int) ($mentorServices->first()->duration_minutes ?: 20) : 20;
                                 @endphp
                                 <option value="{{ $credit->id }}"
                                     data-available="{{ $credit->availableToSchedule() }}"
-                                    data-duration="{{ $packDuration }}">
+                                    data-duration="{{ $packDuration }}"
+                                    data-services="{{ $mentorServices->map(fn ($s) => ['id' => $s->id, 'title' => $s->title, 'duration_minutes' => $s->duration_minutes])->toJson() }}">
                                     {{ $credit->mentor?->display_name ?? ('#'.$credit->mentor_id) }}
                                     — {{ translate('available') }}: {{ $credit->availableToSchedule() }}
                                 </option>
                             @endforeach
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label>{{ translate('Package / Service') }}</label>
+                        <select name="mentor_service_id" id="scheduleServiceId" class="form-control" required>
+                            <option value="">{{ translate('Select a session pack first') }}</option>
+                        </select>
+                        <small class="text-muted">{{ translate('Which of this mentor\'s services these sessions are booked under. Shown to the student.') }}</small>
                     </div>
                     <div class="form-group">
                         <label>{{ translate('Schedule mode') }}</label>
@@ -723,6 +758,44 @@
             };
         }
 
+        // Fills a "which package do these sessions belong to" <select> from the
+        // data-services="[{id,title,duration_minutes}]" JSON on the given option element.
+        // Without this, scheduled sessions silently defaulted to the mentor's first
+        // service regardless of how many sessions were actually granted.
+        function populateServiceSelect($select, $sourceOption, placeholder) {
+            $select.empty();
+            let services = [];
+            try {
+                services = JSON.parse($sourceOption.attr('data-services') || '[]');
+            } catch (e) {
+                services = [];
+            }
+            if (!services.length) {
+                $select.append($('<option>', { value: '', text: placeholder }));
+                return services;
+            }
+            $select.append($('<option>', { value: '', text: '{{ translate('Select a package') }}' }));
+            services.forEach(function (s) {
+                $select.append($('<option>', {
+                    value: s.id,
+                    text: s.title + ' (' + (s.duration_minutes || 20) + ' min)'
+                }));
+            });
+            $select.val(services[0].id);
+            return services;
+        }
+
+        $('#sessionCreditsMentorId').on('change', function () {
+            populateServiceSelect($('#sessionCreditsServiceId'), $(this).find('option:selected'), '{{ translate('Select mentor first') }}');
+        });
+
+        $('#addSessionCreditsModal').on('show.bs.modal', function () {
+            $('#sessionCreditsMentorId').val('');
+            $('#sessionCreditsTypePaid').prop('checked', true);
+            applySessionCreditsPackType();
+            populateServiceSelect($('#sessionCreditsServiceId'), $('<option>'), '{{ translate('Select mentor first') }}');
+        });
+
         $('#paymentReminderModal').on('show.bs.modal', function (event) {
             const button = $(event.relatedTarget);
             const bookingId = button.data('booking-id');
@@ -745,11 +818,23 @@
             }).first();
             if ($firstAvailable.length) {
                 $credit.val($firstAvailable.val());
+                populateServiceSelect($('#scheduleServiceId'), $firstAvailable, '{{ translate('No services on this mentor') }}');
                 $('#scheduleDurationMinutes').val($firstAvailable.attr('data-duration') || 20);
             } else {
                 $credit.val('');
+                populateServiceSelect($('#scheduleServiceId'), $('<option>'), '{{ translate('Select a session pack first') }}');
             }
             syncScheduleFromCreditsForm();
+        });
+
+        $('#scheduleServiceId').on('change', function () {
+            const services = scheduleSelectedCreditOption().attr('data-services');
+            let list = [];
+            try { list = JSON.parse(services || '[]'); } catch (e) { list = []; }
+            const chosen = list.find(s => String(s.id) === String($(this).val()));
+            if (chosen) {
+                $('#scheduleDurationMinutes').val(chosen.duration_minutes || 20);
+            }
         });
 
         function scheduleSelectedCreditOption() {
@@ -847,6 +932,7 @@
         $('#scheduleCreditId').on('change', function () {
             const maxCount = Math.min(52, Math.max(scheduleAvailableCount(), 1));
             $('#scheduleCount').val(maxCount > 0 ? maxCount : 1);
+            populateServiceSelect($('#scheduleServiceId'), scheduleSelectedCreditOption(), '{{ translate('No services on this mentor') }}');
             $('#scheduleDurationMinutes').val(scheduleDefaultDuration());
             syncScheduleFromCreditsForm();
         });
@@ -861,6 +947,11 @@
             if (!creditId) {
                 e.preventDefault();
                 alert('{{ translate('Please select a session pack') }}');
+                return false;
+            }
+            if (!$('#scheduleServiceId').val()) {
+                e.preventDefault();
+                alert('{{ translate('Please select which package these sessions belong to') }}');
                 return false;
             }
             if (available < 1) {
@@ -934,6 +1025,29 @@
         });
         $('#sessionCreditsCount, #sessionCreditsTotalAmount, #sessionCreditsFeeCustom').on('input change', updateSessionCreditsFundPreview);
         updateSessionCreditsFundPreview();
+
+        // Demo = always 1 session, no amount/fee fields. Free = admin picks
+        // the count, still no amount/fee fields. Paid = unchanged, full form.
+        function applySessionCreditsPackType() {
+            const type = $('input[name="pack_type"]:checked').val() || 'paid';
+            const isPaid = type === 'paid';
+            const isDemo = type === 'demo';
+
+            $('#sessionCreditsPaidFields').toggle(isPaid);
+            $('#sessionCreditsTotalAmount').prop('required', isPaid);
+
+            $('#sessionCreditsCountGroup').toggle(!isDemo);
+            if (isDemo) {
+                $('#sessionCreditsCount').val(1);
+            }
+
+            if (isPaid) {
+                updateSessionCreditsFundPreview();
+            }
+        }
+
+        $('input[name="pack_type"]').on('change', applySessionCreditsPackType);
+        applySessionCreditsPackType();
     </script>
 @endpush
 <script>

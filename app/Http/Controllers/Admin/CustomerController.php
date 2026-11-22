@@ -15,6 +15,7 @@ use App\Model\Conversation;
 use App\Model\DemoBooking;
 use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorBooking;
+use App\Model\Mentor\MentorService;
 use App\Model\Mentor\MentorSessionCredit;
 use App\Model\SessionChatMessage;
 use App\Model\SessionChatMessagingOverride;
@@ -33,6 +34,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Rap2hpoutre\FastExcel\FastExcel;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -171,6 +173,9 @@ class CustomerController extends Controller
 
             $activeMentors = Mentor::query()
                 ->where('status', 'active')
+                ->with(['services' => function ($q) {
+                    $q->where('is_enabled', true)->orderBy('sort_order');
+                }])
                 ->orderBy('display_name')
                 ->get(['id', 'display_name', 'username']);
 
@@ -291,36 +296,58 @@ class CustomerController extends Controller
     {
         $validated = $request->validate([
             'mentor_id' => 'required|integer|exists:mentors,id',
+            'pack_type' => 'nullable|in:paid,demo,free',
             'credits' => 'required|integer|min:1|max:500',
-            'total_amount' => 'required|numeric|min:0.01|max:9999999',
+            // Only a paid pack needs real money; demo/free are forced to 0 below.
+            'total_amount' => 'required_if:pack_type,paid|nullable|numeric|min:0|max:9999999',
             'platform_fee_percent' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string|max:2000',
             'schedule_now' => 'nullable|boolean',
             'start_date' => 'required_if:schedule_now,1|nullable|date',
             'start_time' => 'required_if:schedule_now,1|nullable|string|max:32',
-            'mentor_service_id' => 'nullable|integer',
+            'mentor_service_id' => [
+                'required_if:schedule_now,1',
+                'nullable',
+                'integer',
+                Rule::exists('mentor_services', 'id')->where(
+                    fn ($q) => $q->where('mentor_id', $request->input('mentor_id'))
+                ),
+            ],
+        ], [
+            'mentor_service_id.required_if' => translate('Choose which package these sessions belong to.'),
+            'total_amount.required_if' => translate('Total amount is required for a paid pack.'),
         ]);
 
         $customer = $this->user->findOrFail($id);
         $mentor = Mentor::findOrFail($validated['mentor_id']);
+        $packType = $validated['pack_type'] ?? 'paid';
+        // A demo is always exactly one session; free sessions keep the
+        // admin-chosen count. Neither carries an amount or platform fee —
+        // only a paid pack does.
+        $credits = $packType === 'demo' ? 1 : (int) $validated['credits'];
+        $totalAmount = $packType === 'paid' ? (float) $validated['total_amount'] : 0.0;
+        $feePercent = $packType === 'paid'
+            ? (isset($validated['platform_fee_percent']) && $validated['platform_fee_percent'] !== ''
+                ? (float) $validated['platform_fee_percent']
+                : null)
+            : 0.0;
 
         try {
             $credit = SessionCreditLogic::grant(
                 $customer,
                 $mentor,
-                (int) $validated['credits'],
-                (float) $validated['total_amount'],
+                $credits,
+                $totalAmount,
                 auth('admin')->id(),
                 $validated['notes'] ?? null,
-                isset($validated['platform_fee_percent']) && $validated['platform_fee_percent'] !== ''
-                    ? (float) $validated['platform_fee_percent']
-                    : null
+                $feePercent,
+                $packType
             );
 
             if (!empty($validated['schedule_now'])) {
                 MentorSessionLifecycleLogic::ensurePackSessionRows($credit);
                 $mode = (string) ($request->input('mode') ?: 'one_off');
-                $count = $mode === 'one_off' ? 1 : (int) $validated['credits'];
+                $count = $mode === 'one_off' ? 1 : $credits;
                 SessionCreditLogic::scheduleSessions($credit->fresh(), [
                     'mode' => $mode,
                     'start_date' => $validated['start_date'],
@@ -348,13 +375,23 @@ class CustomerController extends Controller
             'start_time' => 'required|string|max:32',
             'count' => 'nullable|integer|min:1|max:52',
             'duration_minutes' => 'nullable|integer|min:5|max:480',
-            'mentor_service_id' => 'nullable|integer',
+            'mentor_service_id' => 'required|integer|exists:mentor_services,id',
             'mentee_note' => 'nullable|string|max:2000',
+        ], [
+            'mentor_service_id.required' => translate('Choose which package these sessions belong to.'),
         ]);
 
         $credit = MentorSessionCredit::where('id', $validated['credit_id'])
             ->where('mentee_user_id', $id)
             ->firstOrFail();
+
+        $service = MentorService::where('id', $validated['mentor_service_id'])
+            ->where('mentor_id', $credit->mentor_id)
+            ->first();
+        if (!$service) {
+            Toastr::error(translate('Selected package does not belong to this mentor'));
+            return back();
+        }
 
         try {
             MentorSessionLifecycleLogic::ensurePackSessionRows($credit);
@@ -494,6 +531,15 @@ class CustomerController extends Controller
 
         if ($runningOrdersCount > 0){
             Toastr::error(translate("This customer have {$runningOrdersCount} running order. Please complete the running order first"));
+            return back();
+        }
+
+        $unusedSessionPacksCount = MentorSessionCredit::where('mentee_user_id', $request->id)
+            ->whereColumn('credits_used', '<', 'credits_total')
+            ->count();
+
+        if ($unusedSessionPacksCount > 0) {
+            Toastr::error(translate("This customer has {$unusedSessionPacksCount} mentor session pack(s) with unused sessions. Deleting this account permanently destroys that pack and orphans its booked sessions. Use up or cancel the sessions first."));
             return back();
         }
 
