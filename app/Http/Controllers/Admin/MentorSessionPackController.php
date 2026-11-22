@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\SessionCreditLogic;
 use App\Http\Controllers\Controller;
+use App\Model\Mentor\Mentor;
 use App\Model\Mentor\MentorSessionCredit;
+use App\User;
 use Brian2694\Toastr\Facades\Toastr;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -17,11 +19,29 @@ class MentorSessionPackController extends Controller
     {
         $search = trim((string) $request->get('search', ''));
         $paymentFilter = (string) $request->get('payment', '');
+        $mentorFilter = (string) $request->get('mentor_id', '');
+        $menteeFilter = (string) $request->get('mentee_user_id', '');
+        $statusFilter = (string) $request->get('status', '');
+        $sort = (string) $request->get('sort', 'desc') === 'asc' ? 'asc' : 'desc';
 
         $query = MentorSessionCredit::with(['mentor', 'mentee']);
 
         if (in_array($paymentFilter, ['paid', 'pending'], true)) {
             $query->where('payment_status', $paymentFilter);
+        }
+
+        if ($mentorFilter !== '') {
+            $query->where('mentor_id', $mentorFilter);
+        }
+
+        if ($menteeFilter !== '') {
+            $query->where('mentee_user_id', $menteeFilter);
+        }
+
+        if ($statusFilter === 'active') {
+            $query->whereColumn('credits_used', '<', 'credits_total');
+        } elseif ($statusFilter === 'completed') {
+            $query->whereColumn('credits_used', '>=', 'credits_total');
         }
 
         if ($search !== '') {
@@ -37,14 +57,28 @@ class MentorSessionPackController extends Controller
             });
         }
 
-        // Most recently assigned pack first (last_granted_at is only ever
-        // touched by SessionCreditLogic::grant(), unlike updated_at which
-        // also moves on payment toggles and session completions).
-        $query->orderByRaw('COALESCE(last_granted_at, created_at) DESC');
+        // Most recently assigned pack first by default (last_granted_at is only
+        // ever touched by SessionCreditLogic::grant(), unlike updated_at which
+        // also moves on payment toggles and session completions). The "sort"
+        // filter lets the admin flip to oldest-first without changing the
+        // default.
+        $query->orderByRaw('COALESCE(last_granted_at, created_at) ' . ($sort === 'asc' ? 'ASC' : 'DESC'));
 
         $packs = $query->paginate(Helpers::getPagination())->appends($request->query());
 
-        return view('admin-views.session-packs.index', compact('packs', 'search', 'paymentFilter'));
+        // Only mentors/students who actually have a pack — keeps the filter
+        // dropdowns relevant instead of listing the whole platform.
+        $mentorOptions = Mentor::whereIn('id', MentorSessionCredit::select('mentor_id')->distinct())
+            ->orderBy('display_name')
+            ->get(['id', 'display_name']);
+        $menteeOptions = User::whereIn('id', MentorSessionCredit::select('mentee_user_id')->distinct())
+            ->orderBy('f_name')
+            ->get(['id', 'f_name', 'l_name']);
+
+        return view('admin-views.session-packs.index', compact(
+            'packs', 'search', 'paymentFilter', 'mentorFilter', 'menteeFilter', 'statusFilter', 'sort',
+            'mentorOptions', 'menteeOptions'
+        ));
     }
 
     public function show(int $id): View

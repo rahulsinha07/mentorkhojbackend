@@ -21,7 +21,7 @@
             <div class="card-header border-0">
                 <form action="{{ route('admin.session-packs.index') }}" method="GET" class="w-100">
                     <div class="row g-2 align-items-end">
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <label class="input-label">{{ translate('Search') }}</label>
                             <div class="input-group">
                                 <input type="search" name="search" class="form-control"
@@ -32,7 +32,33 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
+                            <label class="input-label">{{ translate('Mentor') }}</label>
+                            <select name="mentor_id" class="custom-select" onchange="this.form.submit()">
+                                <option value="">{{ translate('All') }}</option>
+                                @foreach($mentorOptions ?? [] as $m)
+                                    <option value="{{ $m->id }}" {{ ($mentorFilter ?? '') == $m->id ? 'selected' : '' }}>{{ $m->display_name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="input-label">{{ translate('Student') }}</label>
+                            <select name="mentee_user_id" class="custom-select" onchange="this.form.submit()">
+                                <option value="">{{ translate('All') }}</option>
+                                @foreach($menteeOptions ?? [] as $u)
+                                    <option value="{{ $u->id }}" {{ ($menteeFilter ?? '') == $u->id ? 'selected' : '' }}>{{ trim(($u->f_name ?? '') . ' ' . ($u->l_name ?? '')) ?: ('#' . $u->id) }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="input-label">{{ translate('Status') }}</label>
+                            <select name="status" class="custom-select" onchange="this.form.submit()">
+                                <option value="">{{ translate('All') }}</option>
+                                <option value="active" {{ ($statusFilter ?? '') === 'active' ? 'selected' : '' }}>{{ translate('Active') }}</option>
+                                <option value="completed" {{ ($statusFilter ?? '') === 'completed' ? 'selected' : '' }}>{{ translate('Completed') }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
                             <label class="input-label">{{ translate('Payment') }}</label>
                             <select name="payment" class="custom-select" onchange="this.form.submit()">
                                 <option value="">{{ translate('All') }}</option>
@@ -40,9 +66,18 @@
                                 <option value="pending" {{ ($paymentFilter ?? '') === 'pending' ? 'selected' : '' }}>{{ translate('Payment pending') }}</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="row g-2 align-items-end mt-2">
+                        <div class="col-md-3">
+                            <label class="input-label">{{ translate('Sort by assigned') }}</label>
+                            <select name="sort" class="custom-select" onchange="this.form.submit()">
+                                <option value="desc" {{ ($sort ?? 'desc') === 'desc' ? 'selected' : '' }}>{{ translate('Newest first') }}</option>
+                                <option value="asc" {{ ($sort ?? 'desc') === 'asc' ? 'selected' : '' }}>{{ translate('Oldest first') }}</option>
+                            </select>
+                        </div>
                         <div class="col-md-2">
                             <a href="{{ route('admin.session-packs.index') }}" class="btn btn-outline-secondary btn-block">
-                                {{ translate('Clear') }}
+                                {{ translate('Clear all filters') }}
                             </a>
                         </div>
                     </div>
