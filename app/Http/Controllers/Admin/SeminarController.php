@@ -60,7 +60,7 @@ class SeminarController extends Controller
     {
         $request->validate([
             'title' => 'required|max:255',
-            'slug' => 'nullable|max:120|unique:seminars,slug',
+            'slug' => ['nullable', 'max:120', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', 'unique:seminars,slug'],
             'tagline' => 'nullable|max:255',
             'blurb' => 'nullable',
             'date' => 'nullable|max:255',
@@ -72,6 +72,8 @@ class SeminarController extends Controller
             'sort_order' => 'nullable|integer|min:0',
             'fee_amount' => 'nullable|numeric|min:0|max:999999.99',
             'currency' => 'nullable|string|size:3',
+        ], [
+            'slug.regex' => 'Slug must be lowercase letters, numbers and hyphens only (e.g. my-seminar-title) — leave blank to auto-generate from the title.',
         ]);
 
         $seminar = new Seminar();
@@ -106,7 +108,7 @@ class SeminarController extends Controller
 
         $request->validate([
             'title' => 'required|max:255',
-            'slug' => 'nullable|max:120|unique:seminars,slug,' . $id,
+            'slug' => ['nullable', 'max:120', 'regex:/^[a-z0-9]+(-[a-z0-9]+)*$/', 'unique:seminars,slug,' . $id],
             'tagline' => 'nullable|max:255',
             'blurb' => 'nullable',
             'date' => 'nullable|max:255',
@@ -118,6 +120,8 @@ class SeminarController extends Controller
             'sort_order' => 'nullable|integer|min:0',
             'fee_amount' => 'nullable|numeric|min:0|max:999999.99',
             'currency' => 'nullable|string|size:3',
+        ], [
+            'slug.regex' => 'Slug must be lowercase letters, numbers and hyphens only (e.g. my-seminar-title) — leave blank to auto-generate from the title.',
         ]);
 
         $seminar->title = $request->title;
