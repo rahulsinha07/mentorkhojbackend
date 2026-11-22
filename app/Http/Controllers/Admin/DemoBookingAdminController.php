@@ -25,6 +25,7 @@ class DemoBookingAdminController extends Controller
         'jee' => 'JEE',
         'tech' => 'Tech',
         'ai' => 'AI/ML',
+        'olympiad' => 'Olympiad',
     ];
 
     public function index(Request $request)
@@ -231,6 +232,7 @@ class DemoBookingAdminController extends Controller
             'jee' => ['jee', 'iit-jee', 'iit'],
             'tech' => ['tech', 'sde'],
             'ai' => ['ai', 'ml', 'ai-ml'],
+            'olympiad' => ['olympiad', 'olympiad-mentor'],
         ];
         $keys = $map[$vertical] ?? [$vertical];
 
@@ -247,6 +249,9 @@ class DemoBookingAdminController extends Controller
     protected function detectVertical(DemoBooking $b): string
     {
         $raw = strtolower(($b->vertical ?? '') . ' ' . ($b->category ?? ''));
+        if (str_contains($raw, 'olympiad')) {
+            return 'olympiad';
+        }
         if (str_contains($raw, 'neet')) {
             return 'neet';
         }
@@ -266,7 +271,7 @@ class DemoBookingAdminController extends Controller
     /** @return array<string,int> */
     protected function verticalCounts(): array
     {
-        $counts = ['neet' => 0, 'jee' => 0, 'tech' => 0, 'ai' => 0, 'other' => 0];
+        $counts = ['neet' => 0, 'jee' => 0, 'tech' => 0, 'ai' => 0, 'olympiad' => 0, 'other' => 0];
         DemoBooking::query()->select(['id', 'category', 'vertical'])->chunkById(200, function ($rows) use (&$counts) {
             foreach ($rows as $row) {
                 $v = $this->detectVertical($row);
@@ -340,7 +345,7 @@ class DemoBookingAdminController extends Controller
             'Admin Notes', 'Last Communication At',
         ];
 
-        $rowsByVertical = ['neet' => [], 'jee' => [], 'tech' => [], 'ai' => [], 'other' => []];
+        $rowsByVertical = ['neet' => [], 'jee' => [], 'tech' => [], 'ai' => [], 'olympiad' => [], 'other' => []];
         $allRows = [];
 
         DemoBooking::query()
