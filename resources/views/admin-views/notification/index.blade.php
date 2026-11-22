@@ -13,6 +13,20 @@
                     {{translate('Send Push Notification')}}
                 </span>
             </h1>
+            <ul class="nav nav-tabs border-0">
+                <li class="nav-item">
+                    <a class="nav-link {{ ($audience ?? 'mentee') === 'mentee' ? 'active' : '' }}"
+                       href="{{ route('admin.notification.add-new', ['audience' => 'mentee']) }}">
+                        {{ translate('Students') }}
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ ($audience ?? '') === 'mentor' ? 'active' : '' }}"
+                       href="{{ route('admin.notification.add-new', ['audience' => 'mentor']) }}">
+                        {{ translate('Mentors') }}
+                    </a>
+                </li>
+            </ul>
         </div>
         <div class="row">
             <div class="col-sm-12 mb-5">
@@ -20,6 +34,11 @@
                     <div class="card-body">
                         <form action="{{route('admin.notification.store')}}" method="post" enctype="multipart/form-data">
                             @csrf
+                            <input type="hidden" name="audience" value="{{ $audience ?? 'mentee' }}">
+                            <p class="text-muted mb-3">
+                                {{ translate('Sending to') }}:
+                                <strong>{{ ($audience ?? 'mentee') === 'mentor' ? translate('All Mentors') : translate('All Students') }}</strong>
+                            </p>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <div class="form-group">
@@ -89,6 +108,7 @@
                                     <th>{{translate('image')}}</th>
                                     <th>{{translate('title')}}</th>
                                     <th>{{translate('description')}}</th>
+                                    <th class="text-center">{{translate('audience')}}</th>
                                     <th class="text-center">{{translate('status')}}</th>
                                     <th class="text-center">{{translate('action')}}</th>
                                 </tr>
@@ -116,6 +136,15 @@
                                         <div class="line--limit-2 max-200px ">
                                         {{substr($notification['description'],0,50)}} {{strlen($notification['description'])>25?'...':''}}
                                         </div>
+                                    </td>
+                                    <td class="text-center">
+                                        @if(($notification->audience ?? null) === 'mentor')
+                                            <span class="badge badge-soft-primary">{{translate('Mentors')}}</span>
+                                        @elseif(($notification->audience ?? null) === 'mentee')
+                                            <span class="badge badge-soft-secondary">{{translate('Students')}}</span>
+                                        @else
+                                            <span class="text-muted">—</span>
+                                        @endif
                                     </td>
                                     <td>
                                         <label class="toggle-switch my-0">
