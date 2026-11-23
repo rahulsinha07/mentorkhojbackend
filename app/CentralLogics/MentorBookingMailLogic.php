@@ -191,9 +191,8 @@ class MentorBookingMailLogic
             return false;
         }
 
-        // Sent separately, not combined, so the mentor gets their own Zoho
-        // host link (meetingUrlFor() via bookingContext(forMentor: true))
-        // instead of the mentee's plain join link.
+        // Sent separately, not combined, so each side gets their own
+        // dashboard link and name personalization in bookingContext().
         $sentAny = false;
         $lastError = null;
 
@@ -487,17 +486,14 @@ class MentorBookingMailLogic
     }
 
     /**
-     * Zoho only grants host status to whoever opens zoho_start_link; the
-     * plain join link (meeting_url) leaves the mentor stuck without host
-     * controls (mute/record/end-for-all) on their own session. The mentee
-     * always gets the join link either way.
+     * zoho_start_link (host link) needs the opening device to prove it's the
+     * host, which the Zoho mobile app can't do for a mentor with no Zoho
+     * login — that showed up as mentors getting stuck on a password prompt.
+     * Mentor and mentee both get the same plain join link, which mentees
+     * and admin already use without any login friction.
      */
     private static function meetingUrlFor(MentorBooking $booking, bool $forMentor): ?string
     {
-        if ($forMentor && $booking->meeting_link_source === 'zoho' && $booking->zoho_start_link) {
-            return $booking->zoho_start_link;
-        }
-
         return $booking->meeting_url;
     }
 
@@ -576,9 +572,8 @@ class MentorBookingMailLogic
     /**
      * WhatsApp both sides once a session's date/time/join link is set —
      * mentee and mentor each get the other's name, the time, their own
-     * dashboard link, and the meeting link (the mentor gets the Zoho host
-     * link, see meetingUrlFor(), so they get host controls on their own
-     * session instead of being stuck as a plain participant).
+     * dashboard link, and the same plain meeting join link (mentor and
+     * mentee use the identical link; see meetingUrlFor()).
      */
     private static function sendWhatsAppSessionScheduled(MentorBooking $booking, string $date, string $time): void
     {
@@ -724,9 +719,8 @@ class MentorBookingMailLogic
             return false;
         }
 
-        // Sent separately, not combined, so the mentor gets their own Zoho
-        // host link (meetingUrlFor() via bookingContext(forMentor: true))
-        // instead of the mentee's plain join link.
+        // Sent separately, not combined, so each side gets their own
+        // dashboard link and name personalization in bookingContext().
         $sentAny = false;
         $lastError = null;
 

@@ -22,11 +22,10 @@ class SessionIcsLogic
         $serviceTitle = $booking->service?->title ?? 'Mentor session';
         $summary = "{$serviceTitle} with {$mentorName}";
         $uid = "mentorkhoj-session-{$booking->id}@mentorkhoj.com";
-        // Mentor gets the host start link (so opening it grants host status
-        // without a Zoho login) — see ZohoMeetingService::createMeeting().
-        $meetingUrl = ($forMentor && $booking->meeting_link_source === 'zoho' && $booking->zoho_start_link)
-            ? $booking->zoho_start_link
-            : $booking->meeting_url;
+        // Mentor and mentee both get the plain join link — the Zoho host
+        // link needs the device to prove it's the host, which the mobile
+        // app can't do for a mentor with no Zoho login.
+        $meetingUrl = $booking->meeting_url;
         $description = $meetingUrl ? "Join: {$meetingUrl}" : 'MentorKhoj session';
 
         $lines = [

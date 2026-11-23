@@ -519,14 +519,12 @@ class MentorBookingLogic
             'duration_minutes' => $booking->duration_minutes ?? $booking->service?->duration_minutes,
             'session_type' => $booking->session_type ?? $booking->service?->meeting_type,
             'timezone' => $booking->timezone ?? MentorSessionLifecycleLogic::appTimezone(),
-            // Zoho only recognizes whoever opens zoho_start_link as host; the
-            // plain join link (meeting_url) leaves everyone, mentor included,
-            // stuck on "waiting for host". Give the mentor the start link so
-            // they can actually start the session; the mentee keeps the join
-            // link either way.
-            'meeting_url' => ($forMentor && $booking->meeting_link_source === 'zoho' && $booking->zoho_start_link)
-                ? $booking->zoho_start_link
-                : $booking->meeting_url,
+            // zoho_start_link (host link) requires the device to prove it's
+            // the host — on the Zoho mobile app that surfaces as a password
+            // prompt mentors can't get past, since they have no Zoho login.
+            // Give everyone the same plain join link mentees and admin
+            // already use without issue.
+            'meeting_url' => $booking->meeting_url,
             'meeting_link_source' => $booking->meeting_link_source,
             'zoho_last_error' => $booking->zoho_last_error,
             'recording' => $booking->recording_play_url ? [
