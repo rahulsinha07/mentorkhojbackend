@@ -36,6 +36,10 @@ class MentorPublicController extends Controller
             });
         }
 
+        if ($request->boolean('featured')) {
+            $query->where('is_featured', true);
+        }
+
         $limit = (int) ($request->limit ?? 20);
         $offset = (int) ($request->offset ?? 0);
 

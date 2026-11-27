@@ -100,6 +100,7 @@ class MentorLogic
             'discount' => $mentor->profile_discount,
             'discount_type' => $mentor->discount_type,
             'is_published' => $mentor->is_published,
+            'is_featured' => (bool) $mentor->is_featured,
             'view_count' => $mentor->view_count,
             'profile_url' => self::profileUrl($mentor),
             'social_links' => $mentor->social_links_array,

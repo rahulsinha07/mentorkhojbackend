@@ -333,6 +333,21 @@ class MentorController extends Controller
         return back();
     }
 
+    public function feature(Request $request): RedirectResponse
+    {
+        $mentor = $this->mentor->find($request->id);
+        if (!$mentor) {
+            Toastr::error(translate('mentor not found'));
+            return back();
+        }
+
+        $mentor->is_featured = (bool) $request->is_featured;
+        $mentor->save();
+
+        Toastr::success(translate('mentor featured status updated!'));
+        return back();
+    }
+
     public function delete(Request $request): RedirectResponse
     {
         $mentor = $this->mentor->find($request->id);

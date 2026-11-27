@@ -88,6 +88,7 @@
                                     <th class="text-center">{{ translate('Rank') }}</th>
                                 @endif
                                 <th class="text-center">{{ translate('Real reviews only') }}</th>
+                                <th class="text-center">{{ translate('Featured') }}</th>
                                 <th class="text-center">{{ translate('published') }}</th>
                                 <th class="text-center">{{ translate('status') }}</th>
                                 <th class="text-center">{{ translate('action') }}</th>
@@ -167,6 +168,17 @@
                                                 onclick="status_change_alert('{{ route('admin.mentor.toggle-default-reviews', [$mentor->id, $hidesDefaults ? 0 : 1]) }}', '{{ $hidesDefaults ? translate('you want to re-enable default placeholder reviews for this mentor') : translate('you want to hide default placeholder reviews for this mentor — only real reviews will show') }}', event)"
                                                 class="toggle-switch-input"
                                                 {{ $hidesDefaults ? 'checked' : '' }}>
+                                            <span class="toggle-switch-label mx-auto text">
+                                                <span class="toggle-switch-indicator"></span>
+                                            </span>
+                                        </label>
+                                    </td>
+                                    <td class="text-center">
+                                        <label class="toggle-switch my-0" title="{{ translate('Shows this mentor in the MentorKhoj homepage Featured mentors rail.') }}">
+                                            <input type="checkbox"
+                                                onclick="status_change_alert('{{ route('admin.mentor.feature', [$mentor->id, $mentor->is_featured ? 0 : 1]) }}', '{{ $mentor->is_featured ? translate('you want to remove this mentor from Featured mentors') : translate('you want to feature this mentor on the homepage') }}', event)"
+                                                class="toggle-switch-input"
+                                                {{ $mentor->is_featured ? 'checked' : '' }}>
                                             <span class="toggle-switch-label mx-auto text">
                                                 <span class="toggle-switch-indicator"></span>
                                             </span>

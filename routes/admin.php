@@ -244,6 +244,7 @@ Route::group(['namespace' => 'Admin', 'as' => 'admin.'], function () {
             Route::post('update/{id}', [MentorController::class, 'update'])->name('update');
             Route::get('status/{id}/{status}', [MentorController::class, 'status'])->name('status');
             Route::get('publish/{id}/{is_published}', [MentorController::class, 'publish'])->name('publish');
+            Route::get('feature/{id}/{is_featured}', [MentorController::class, 'feature'])->name('feature');
             Route::delete('delete/{id}', [MentorController::class, 'delete'])->name('delete');
         });
 

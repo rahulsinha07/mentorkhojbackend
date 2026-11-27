@@ -14,6 +14,7 @@ class Mentor extends Model
 
     protected $casts = [
         'is_published' => 'boolean',
+        'is_featured' => 'boolean',
         'profile_discount' => 'float',
         'view_count' => 'integer',
         'welcome_email_sent_at' => 'datetime',
@@ -32,6 +33,7 @@ class Mentor extends Model
         'category_ids',
         'status',
         'is_published',
+        'is_featured',
         'profile_discount',
         'discount_type',
         'view_count',
