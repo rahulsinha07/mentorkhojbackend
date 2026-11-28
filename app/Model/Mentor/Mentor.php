@@ -18,6 +18,7 @@ class Mentor extends Model
         'profile_discount' => 'float',
         'view_count' => 'integer',
         'welcome_email_sent_at' => 'datetime',
+        'pending_approval_email_sent_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];

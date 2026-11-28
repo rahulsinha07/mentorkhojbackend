@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\V1\Mentor;
 use App\CentralLogics\Helpers;
 use App\CentralLogics\MentorEarningsLogic;
 use App\CentralLogics\MentorImageService;
-use App\CentralLogics\MentorLegacyProductLogic;
 use App\CentralLogics\MentorLogic;
 use App\CentralLogics\MentorWelcomeMailLogic;
 use App\Http\Controllers\Controller;
@@ -107,9 +106,13 @@ class MentorDashboardController extends Controller
         $welcomeEmailSent = false;
 
         try {
-            $welcomeEmailSent = MentorWelcomeMailLogic::sendWelcomeEmail($mentor, $user);
+            // Not actually live yet (is_published is false above) -- tell the
+            // mentor their profile is pending admin review, not that it's
+            // ready. The "you're live" email fires separately once an admin
+            // approves/publishes from the admin panel.
+            $welcomeEmailSent = MentorWelcomeMailLogic::sendPendingApprovalEmail($mentor, $user);
         } catch (\Throwable $e) {
-            Log::warning('Mentor welcome email error: ' . $e->getMessage(), [
+            Log::warning('Mentor pending-approval email error: ' . $e->getMessage(), [
                 'mentor_id' => $mentor->id,
                 'user_id' => $user->id,
             ]);
@@ -204,15 +207,21 @@ class MentorDashboardController extends Controller
             return response()->json(['errors' => [['message' => 'Mentor profile not found']]], 404);
         }
 
-        $mentor->is_published = (bool) $request->input('is_published', true);
-        if ($mentor->is_published) {
-            $mentor->status = 'active';
-        }
-        $mentor->save();
+        $wantsPublish = (bool) $request->input('is_published', true);
 
-        if ($mentor->is_published) {
-            MentorLegacyProductLogic::ensureForMentor($mentor->fresh('enabledServices'));
+        // Mentors can take their own page down any time, but going live
+        // requires MentorKhoj admin approval (admin.mentor.publish) --
+        // a mentor request here can only ever turn it off.
+        if ($wantsPublish && !$mentor->is_published) {
+            return response()->json([
+                'errors' => [[
+                    'message' => 'Your profile is pending MentorKhoj review. Our team will publish it once approved -- you do not need to do anything else.',
+                ]],
+            ], 403);
         }
+
+        $mentor->is_published = $wantsPublish && $mentor->is_published;
+        $mentor->save();
 
         return response()->json([
             'message' => $mentor->is_published ? 'Page published' : 'Page unpublished',

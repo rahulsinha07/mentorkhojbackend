@@ -7,6 +7,7 @@ use App\CentralLogics\MentorImageService;
 use App\CentralLogics\MentorLegacyProductLogic;
 use App\CentralLogics\MentorCategoryRankLogic;
 use App\CentralLogics\MentorLogic;
+use App\CentralLogics\MentorWelcomeMailLogic;
 use Illuminate\Pagination\LengthAwarePaginator;
 use App\Http\Controllers\Controller;
 use App\Model\Category;
@@ -327,6 +328,22 @@ class MentorController extends Controller
 
         if ($mentor->is_published) {
             MentorLegacyProductLogic::ensureForMentor($mentor->fresh('enabledServices'));
+
+            // This is the approval step -- the mentor's own dashboard can
+            // never set is_published true by itself (MentorDashboardController
+            // blocks that). sendWelcomeEmail() already dedupes against
+            // welcome_email_sent_at, so re-publishing after a later
+            // unpublish won't resend it.
+            if ($mentor->user) {
+                try {
+                    MentorWelcomeMailLogic::sendWelcomeEmail($mentor, $mentor->user);
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning(
+                        'Mentor welcome email on admin publish failed: ' . $e->getMessage(),
+                        ['mentor_id' => $mentor->id]
+                    );
+                }
+            }
         }
 
         Toastr::success(translate('mentor publish status updated!'));

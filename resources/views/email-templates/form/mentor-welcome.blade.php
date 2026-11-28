@@ -3,14 +3,14 @@
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
     <tr>
         <td style="padding-bottom:20px;">
-            <span style="display:inline-block;background-color:#ecfdf5;color:#047857;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;padding:6px 14px;border-radius:999px;border:1px solid #a7f3d0;">✓ Mentor profile created</span>
+            <span style="display:inline-block;background-color:#ecfdf5;color:#047857;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;padding:6px 14px;border-radius:999px;border:1px solid #a7f3d0;">✓ Profile approved &amp; live</span>
         </td>
     </tr>
 </table>
 
 <h1 style="margin:0 0 8px;font-size:26px;font-weight:800;color:#0f172a;letter-spacing:-0.02em;line-height:1.2;">Welcome to MentorKhoj!</h1>
 <p style="margin:0 0 24px;font-size:15px;line-height:1.65;color:#475569;">
-    Hi {{ $mentor_first_name }}, your mentor profile has been created successfully. You’re now part of a community helping learners grow through meaningful mentorship.
+    Hi {{ $mentor_first_name }}, good news — your mentor profile has been reviewed and approved. It's now live on MentorKhoj, and you're part of a community helping learners grow through meaningful mentorship.
 </p>
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:24px;">
@@ -51,7 +51,7 @@
     </tr>
     <tr>
         <td style="padding:6px 0;font-size:14px;line-height:1.55;color:#475569;">
-            <span style="color:#10b981;font-weight:bold;margin-right:8px;">✓</span>Complete your profile and publish your page
+            <span style="color:#10b981;font-weight:bold;margin-right:8px;">✓</span>Your page is approved and live — keep your profile up to date
         </td>
     </tr>
     <tr>

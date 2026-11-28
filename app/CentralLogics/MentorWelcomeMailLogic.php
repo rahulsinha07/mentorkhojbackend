@@ -58,6 +58,65 @@ class MentorWelcomeMailLogic
         }
     }
 
+    /**
+     * Sent the moment a mentor profile is created — explains the profile is
+     * held for admin review and isn't live yet. The original "you're live"
+     * welcome email (sendWelcomeEmail) only fires once admin approves/
+     * publishes from the admin panel.
+     */
+    public static function sendPendingApprovalEmail(Mentor $mentor, User $user): bool
+    {
+        if (!FormMailLogic::isMailEnabled()) {
+            Log::warning('Mentor pending-approval mail skipped: SMTP not configured');
+
+            return false;
+        }
+
+        if (self::hasPendingApprovalEmailColumn() && $mentor->pending_approval_email_sent_at) {
+            return true;
+        }
+
+        $email = self::resolveUserEmail($user);
+        if (!$email) {
+            Log::warning('Mentor pending-approval mail skipped: no email on user account', [
+                'mentor_id' => $mentor->id,
+                'user_id' => $user->id,
+                'login_medium' => $user->login_medium,
+            ]);
+
+            return false;
+        }
+
+        try {
+            Mail::to($email)
+                ->cc(FormMailLogic::notifyEmail())
+                ->send(new \App\Mail\Form\FormSubmissionMail(
+                    'Your MentorKhoj profile is under review',
+                    'email-templates.form.mentor-pending-approval',
+                    FormMailLogic::withBrandPublic(self::welcomeContext($mentor, $user))
+                ));
+
+            if (self::hasPendingApprovalEmailColumn()) {
+                $mentor->pending_approval_email_sent_at = now();
+                $mentor->save();
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('Mentor pending-approval email failed: ' . $e->getMessage(), [
+                'mentor_id' => $mentor->id,
+                'user_id' => $user->id,
+            ]);
+
+            return false;
+        }
+    }
+
+    private static function hasPendingApprovalEmailColumn(): bool
+    {
+        return Schema::hasColumn('mentors', 'pending_approval_email_sent_at');
+    }
+
     /** @return array<string, mixed> */
     public static function welcomeContext(Mentor $mentor, User $user): array
     {
@@ -73,6 +132,10 @@ class MentorWelcomeMailLogic
             'created_at' => $mentor->created_at?->format('l, d M Y') ?? now()->format('l, d M Y'),
             'login_medium' => self::loginMediumLabel($user->login_medium),
             'support_email' => FormMailLogic::adminEmail(),
+            'support_call_display' => '+91 91026 95888',
+            'support_call_tel' => '+919102695888',
+            'support_whatsapp_display' => '+91 73669 39888',
+            'support_whatsapp_url' => 'https://wa.me/917366939888',
         ];
     }
 
