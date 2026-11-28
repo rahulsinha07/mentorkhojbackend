@@ -34,9 +34,6 @@
                     </td>
                 </tr>
                 @endif
-                <tr>
-                    <td style="padding:8px 0;border-top:1px solid #e2e8f0;font-size:14px;color:#334155;"><strong style="color:#0f172a;">{{ $amount_label ?? 'Amount paid' }}</strong><br>{{ $amount_paid }}</td>
-                </tr>
             </table>
         </td>
     </tr>

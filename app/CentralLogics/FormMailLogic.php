@@ -59,23 +59,25 @@ class FormMailLogic
             'seminars_url' => $siteUrl . '/seminars',
             'internships_url' => $siteUrl . '/internships',
             'mentors_url' => $siteUrl . '/mentors',
+            'play_store_url' => 'https://play.google.com/store/apps/details?id=com.betterwitssoftware.mentorkhoj',
+            'app_store_url' => 'https://apps.apple.com/in/app/mentorkhoj/id6739975565',
+            'support_call_display' => '+91 91026 95888',
+            'support_call_tel' => '+919102695888',
+            'support_whatsapp_display' => '+91 73669 39888',
+            'support_whatsapp_url' => 'https://wa.me/917366939888',
         ];
     }
 
     public static function brandLogoUrl(): string
     {
         $siteUrl = rtrim((string) config('app.mentorkhoj_site_url', 'https://www.mentorkhoj.com'), '/');
-        $mentorkhojLogo = $siteUrl . '/logo-512.png';
 
-        try {
-            $logoSetting = Helpers::get_business_settings('logo');
-            if (!empty($logoSetting)) {
-                return asset('storage/app/public/restaurant/' . $logoSetting);
-            }
-        } catch (\Throwable $e) {
-        }
-
-        return $mentorkhojLogo;
+        // Always the current MentorKhoj mark on the branded domain. This
+        // used to fall back to business_settings['logo'] -- a leftover
+        // from this codebase's original generic-marketplace template --
+        // which served a stale logo upload off the raw backend domain
+        // instead of the actual site's asset.
+        return $siteUrl . '/logo-512.png';
     }
 
     /** @param array<string, mixed> $data */
