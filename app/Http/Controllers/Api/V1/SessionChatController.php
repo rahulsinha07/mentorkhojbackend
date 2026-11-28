@@ -11,6 +11,7 @@ use App\Model\Mentor\Mentor;
 use App\Model\SessionChatMessage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -87,7 +88,18 @@ class SessionChatController extends Controller
         }
 
         if ($file) {
-            $stored = SessionChatLogic::storeAttachment($file);
+            try {
+                $stored = SessionChatLogic::storeAttachment($file);
+            } catch (\Throwable $e) {
+                Log::error('Session chat attachment upload failed: ' . $e->getMessage(), [
+                    'user_id' => $request->user()?->id,
+                    'original_name' => $file->getClientOriginalName(),
+                ]);
+
+                return response()->json([
+                    'errors' => [['message' => 'Could not upload this attachment. Please try again.']],
+                ], 500);
+            }
             if (!$stored) {
                 return response()->json(['errors' => [['message' => 'File type not allowed']]], 422);
             }
@@ -214,25 +226,42 @@ class SessionChatController extends Controller
 
     public function downloadAttachment(Request $request, int $id): StreamedResponse|JsonResponse
     {
-        $message = SessionChatMessage::query()->find($id);
-        if (!$message || !$message->attachment_path) {
-            return response()->json(['errors' => [['message' => 'Attachment not found']]], 404);
+        try {
+            $message = SessionChatMessage::query()->find($id);
+            if (!$message || !$message->attachment_path) {
+                return response()->json(['errors' => [['message' => 'Attachment not found']]], 404);
+            }
+
+            if (!SessionChatLogic::userCanAccessMessage((int) $request->user()->id, $message)) {
+                return response()->json(['errors' => [['message' => 'Chat not available']]], 403);
+            }
+
+            if (!Storage::disk('local')->exists($message->attachment_path)) {
+                return response()->json(['errors' => [['message' => 'Attachment not found']]], 404);
+            }
+
+            $name = $message->attachment_original_name ?: 'attachment';
+            $mime = $message->attachment_mime ?: 'application/octet-stream';
+            $headers = ['Content-Type' => $mime];
+            // Supplying this ourselves skips Flysystem's own filesystem stat
+            // (Storage::size()) on every single download -- one less disk
+            // round-trip that could ever fail, since we already have the
+            // size from upload time.
+            if ($message->attachment_size) {
+                $headers['Content-Length'] = (string) $message->attachment_size;
+            }
+
+            return Storage::disk('local')->download($message->attachment_path, $name, $headers);
+        } catch (\Throwable $e) {
+            Log::error('Session chat attachment download failed: ' . $e->getMessage(), [
+                'message_id' => $id,
+                'user_id' => $request->user()?->id,
+            ]);
+
+            return response()->json([
+                'errors' => [['message' => 'Could not load this attachment right now. Please try again.']],
+            ], 500);
         }
-
-        if (!SessionChatLogic::userCanAccessMessage((int) $request->user()->id, $message)) {
-            return response()->json(['errors' => [['message' => 'Chat not available']]], 403);
-        }
-
-        if (!Storage::disk('local')->exists($message->attachment_path)) {
-            return response()->json(['errors' => [['message' => 'Attachment not found']]], 404);
-        }
-
-        $name = $message->attachment_original_name ?: 'attachment';
-        $mime = $message->attachment_mime ?: 'application/octet-stream';
-
-        return Storage::disk('local')->download($message->attachment_path, $name, [
-            'Content-Type' => $mime,
-        ]);
     }
 
     public function markRead(Request $request): JsonResponse
